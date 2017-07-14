@@ -1,6 +1,11 @@
 # hh0
 Hierarchical Hubble Constant Inference
 
+Authors
+ - Stephen Feeney
+ - Daniel Mortlock
+ - Niccoló Dalmasso
+
 A more complete README is incoming, as is a more user-friendly interface. For now, note the following dependencies
 
  - [PyStan](https://pystan.readthedocs.io/en/latest/)
