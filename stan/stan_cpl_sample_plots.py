@@ -109,10 +109,11 @@ plot_peak_height = True
 plot_d_anc = False
 inc_met_dep = True
 ng_maser_pdf = False
-fit_cosmo_delta = 'hq' # None, 'h', 'hq'
-sim = False
-oplot_r16_results = True
-oplot_pla = True
+nir_sne = False
+fit_cosmo_delta = None # None, 'h', 'hq'
+sim = True
+oplot_r16_results = False
+oplot_pla = False
 oplot_hists = False
 plot_diagnostics = False
 if sne_sum:
@@ -127,6 +128,8 @@ else:
         base += '_fixed_z'
     if model_outliers:
         base += '_' + model_outliers + '_outliers'
+    if nir_sne:
+        base += '_nir_sne'
 if inc_met_dep:
     base += '_metals'
 if ng_maser_pdf:
@@ -242,20 +245,32 @@ if oplot_r16_results:
 else:
 
     # BHM parameter names and labels
-    pars = ['abs_mag_c_std', 'slope_p', 'slope_z', \
-            'abs_mag_s_std', 'alpha_s', 'beta_s', 'q_0', 'h_0']
-    par_names = [r'M^{\odot}', r's^p', r's^Z', r'M^{\rm s}', \
-                 r'\alpha^{\rm s}', r'\beta^{\rm s}', r'q_0', \
-                 r'H_0 [{\rm kms}^{-1}{\rm Mpc}^{-1}]']
-    if sim:
-        par_vals = [-3.08685672935, -3.05, -0.25, -19.2, -0.14, \
-                    3.1, -0.5575, 71.1]
+    if nir_sne:
+        pars = ['abs_mag_c_std', 'slope_p', 'slope_z', \
+                'abs_mag_s_std', 'q_0', 'h_0']
+        par_names = [r'M^{\odot}', r's^p', r's^Z', r'M^{\rm s}', \
+                     r'q_0', r'H_0 [{\rm kms}^{-1}{\rm Mpc}^{-1}]']
+        if sim:
+            par_vals = [-3.08685672935, -3.05, -0.25, -18.5240, \
+                        -0.5575, 72.78]
+        else:
+            par_vals = [None, -3.23, -0.15, -19.3, None, \
+                        None]
     else:
-        #par_vals = [None, -3.23, -0.15, -19.3, None, None, 71.57]
-        #par_vals = [None, -3.23, -0.15, -19.3, None, None, None, \
-        #            r16_h_0]
-        par_vals = [None, -3.23, -0.15, -19.3, None, None, None, \
-                    None]
+        pars = ['abs_mag_c_std', 'slope_p', 'slope_z', \
+                'abs_mag_s_std', 'alpha_s', 'beta_s', 'q_0', 'h_0']
+        par_names = [r'M^{\odot}', r's^p', r's^Z', r'M^{\rm s}', \
+                     r'\alpha^{\rm s}', r'\beta^{\rm s}', r'q_0', \
+                     r'H_0 [{\rm kms}^{-1}{\rm Mpc}^{-1}]']
+        if sim:
+            par_vals = [-3.08685672935, -3.05, -0.25, -19.2, -0.14, \
+                        3.1, -0.5575, 71.1]
+        else:
+            #par_vals = [None, -3.23, -0.15, -19.3, None, None, 71.57]
+            #par_vals = [None, -3.23, -0.15, -19.3, None, None, None, \
+            #            r16_h_0]
+            par_vals = [None, -3.23, -0.15, -19.3, None, None, None, \
+                        None]
 
 # adjust params for BHM samples
 if model_outliers == "gmm":
@@ -410,10 +425,10 @@ if model_outliers == 'ht' and plot_peak_height:
     pars[i_nu_c] = 'phr_c'
     pars[i_nu_s] = 'phr_s'
     if sim:
-        #par_vals[i_nu_c] = nu2phr(par_vals[i_nu_c])
-        #par_vals[i_nu_s] = nu2phr(par_vals[i_nu_s])
-        par_vals[i_nu_c] = 0.998 # really 1, but this stands out
-        par_vals[i_nu_s] = 0.998 # really 1, but this stands out
+        par_vals[i_nu_c] = nu2phr(par_vals[i_nu_c])
+        par_vals[i_nu_s] = nu2phr(par_vals[i_nu_s])
+        #par_vals[i_nu_c] = 0.998 # really 1, but this stands out
+        #par_vals[i_nu_s] = 0.998 # really 1, but this stands out
 
 g = gdp.getSubplotPlotter()
 g.settings.lw_contour = lw # hacky hack hack: GD ignores user contour LWs
@@ -701,6 +716,8 @@ if model_outliers == "ht":
                     line_args = {'lw': lw, 'color': cols[0]}, \
                     contour_args = {'lws': [lw]}, \
                     contour_colors=[mpc.rgb2hex(cols[0])])
+    g.settings.axes_fontsize = 11
+    g.settings.lab_fontsize = 15
     if oplot_r16_results:
         '''mp.plot(h_0_grid, h_0_ln, color = cols[1], linestyle = '--', \
                 dashes = (5, 5))'''
@@ -1172,6 +1189,9 @@ else:
 g = gdp.getSubplotPlotter()
 g.settings.lw_contour = lw # hacky hack hack: GD ignores user contour LWs
 g.settings.line_labels = False
+if model_outliers == 'ht':
+    g.settings.axes_fontsize = 11
+    g.settings.lab_fontsize = 15
 g.settings.default_dash_styles = {'--': (3, 3), '-.': (4, 1, 1, 1)}
 '''g.triangle_plot(gdtp_samples, [pars[i] for i in inds], \
                 filled = gdtp_filled, line_args = gdtp_line_args, \

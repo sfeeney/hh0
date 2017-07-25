@@ -133,15 +133,16 @@ fix_redshifts = False
 model_outliers = None # None, "gmm", "ht"
 inc_met_dep = True
 ng_maser_pdf = False
+nir_sne = False
 inc_zp_off = True
 round_data = False
-fit_cosmo_delta = 'hq' # None, 'h', 'hq'
+fit_cosmo_delta = None # None, 'h', 'hq'
 save_full_fit = False
 save_d_anc = True
 constrain = True
 stan_constrain = True
 setup = "r16"
-sim = False
+sim = True
 
 # determine basis of filename
 if sne_sum:
@@ -156,6 +157,8 @@ else:
         base += '_fixed_z'
     if model_outliers:
         base += '_' + model_outliers + '_outliers'
+    if nir_sne:
+        base += '_nir_sne'
 if inc_met_dep:
     base += '_metals'
 if ng_maser_pdf:
@@ -232,8 +235,12 @@ elif fit_cosmo_delta == 'hq':
 # a non-linear fit to quadratic data...
 # first thing is to convert distances to distance moduli, recalling
 # that distances are Mpc and parallaxes are mas
-riess_a = 0.71273
-sig_riess_a = 0.00176
+if setup == "d17":
+    riess_a = 2.834 / 5.0
+    sig_riess_a = 0.023 / 5.0
+else:
+    riess_a = 0.71273
+    sig_riess_a = 0.00176
 mu_anc = np.zeros(n_ch_g)
 sig_mu_anc = np.zeros(n_ch_g)
 for i in range(0, n_ch_d):
@@ -435,22 +442,23 @@ for i in range(n_ch):
     if inc_met_dep:
         stan_est_z_c[j: j + n_c_ch[i]] = est_z_c[i, 0: n_c_ch[i]]
     j += n_c_ch[i]
-data_s_hi_z = np.zeros((n_s, 3))
-for i in range(0, n_s):
-    data_s_hi_z[i, :] = [est_app_mag_s[i], est_x_1_s[i], est_c_s[i]]
-cov_l_s_hi_z = np.zeros((n_s, 3, 3))
-cov_l_s_hi_z[:, 0, 0] = sig_app_mag_s
-cov_l_s_hi_z[:, 1, 0] = cov_x_1_app_mag_s / cov_l_s_hi_z[:, 0, 0]
-cov_l_s_hi_z[:, 1, 1] = np.sqrt(sig_x_1_s ** 2 - \
-                                cov_l_s_hi_z[:, 1, 0] ** 2)
-cov_l_s_hi_z[:, 2, 0] = cov_c_app_mag_s / cov_l_s_hi_z[:, 0, 0]
-cov_l_s_hi_z[:, 2, 1] = (cov_x_1_c_s - \
-                         cov_l_s_hi_z[:, 2, 0] * \
-                         cov_l_s_hi_z[:, 1, 0]) / \
-                        cov_l_s_hi_z[:, 1, 1]
-cov_l_s_hi_z[:, 2, 2] = np.sqrt(sig_c_s ** 2 - \
-                                cov_l_s_hi_z[:, 2, 0] ** 2 - \
-                                cov_l_s_hi_z[:, 2, 1] ** 2)
+if not nir_sne:
+    data_s_hi_z = np.zeros((n_s, 3))
+    for i in range(0, n_s):
+        data_s_hi_z[i, :] = [est_app_mag_s[i], est_x_1_s[i], est_c_s[i]]
+    cov_l_s_hi_z = np.zeros((n_s, 3, 3))
+    cov_l_s_hi_z[:, 0, 0] = sig_app_mag_s
+    cov_l_s_hi_z[:, 1, 0] = cov_x_1_app_mag_s / cov_l_s_hi_z[:, 0, 0]
+    cov_l_s_hi_z[:, 1, 1] = np.sqrt(sig_x_1_s ** 2 - \
+                                    cov_l_s_hi_z[:, 1, 0] ** 2)
+    cov_l_s_hi_z[:, 2, 0] = cov_c_app_mag_s / cov_l_s_hi_z[:, 0, 0]
+    cov_l_s_hi_z[:, 2, 1] = (cov_x_1_c_s - \
+                             cov_l_s_hi_z[:, 2, 0] * \
+                             cov_l_s_hi_z[:, 1, 0]) / \
+                            cov_l_s_hi_z[:, 1, 1]
+    cov_l_s_hi_z[:, 2, 2] = np.sqrt(sig_c_s ** 2 - \
+                                    cov_l_s_hi_z[:, 2, 0] ** 2 - \
+                                    cov_l_s_hi_z[:, 2, 1] ** 2)
 stan_data = {'n_ch': n_ch, 'n_ch_d': n_ch_d, 'n_ch_p': n_ch_p, \
              'n_ch_c': n_ch_c, 'n_ch_s': n_ch_s, \
              'n_c_tot': n_c_tot, 'c_ch': stan_c_ch, \
@@ -485,14 +493,22 @@ else:
     stan_data['est_d_anc'] = dis_anc
     stan_data['sig_d_anc'] = sig_dis_anc
     stan_data['est_z_s_hi_z'] = est_z_s
-    stan_data['data_s_hi_z'] = data_s_hi_z
-    stan_data['cov_l_s_hi_z'] = cov_l_s_hi_z
+    if nir_sne:
+        stan_data['est_app_mag_s_hi_z'] = est_app_mag_s
+        stan_data['sig_app_mag_s_hi_z'] = sig_app_mag_s
+    else:
+        stan_data['data_s_hi_z'] = data_s_hi_z
+        stan_data['cov_l_s_hi_z'] = cov_l_s_hi_z
     stan_data['est_q_0'] = est_q_0
     stan_data['sig_q_0'] = sig_q_0
     stan_data['lk_corr'] = par_anc_lkc
-    stan_pars = ['abs_mag_c_std', 'slope_p', 'zp_off', \
-                 'abs_mag_s_std', 'alpha_s', 'beta_s', \
-                 'h_0', 'q_0']
+    if nir_sne:
+        stan_pars = ['abs_mag_c_std', 'slope_p', 'zp_off', \
+                     'abs_mag_s_std', 'h_0', 'q_0']
+    else:
+        stan_pars = ['abs_mag_c_std', 'slope_p', 'zp_off', \
+                     'abs_mag_s_std', 'alpha_s', 'beta_s', \
+                     'h_0', 'q_0']
     if not fix_redshifts:
         stan_data['sig_z_s_hi_z'] = np.ones(n_s) * sig_z_s
         stan_data['sig_v_pec'] = sig_v_pec

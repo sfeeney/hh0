@@ -26,8 +26,12 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
     # settings and cuts to match previous analyses
     p_c_min = 5.0 # 2.5 # lower limit ~ 2.5 but for local hosts
     p_c_max = 60.0 # tail beyond 60 but not many
-    z_s_min = 0.023
-    z_s_max = 0.1
+    if setup == "d17":
+        z_s_min = 0.011631
+        z_s_max = 0.0762
+    else:
+        z_s_min = 0.023
+        z_s_max = 0.1
     # @TODO: update metallicity stats to R16
     z_c_mean = 8.86101933216 # derived from R11. true dist bimodal!
     z_c_sigma = 0.15312221469
@@ -76,6 +80,26 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
         zp_off_mask = np.zeros(len(n_c_ch))
         n_s = 217
         z_s_max = 0.15
+    elif setup == "d17":
+        # D17/R16 hybrid fit
+        # anchors: NGC4258, LMC, MW C
+        # cal: M31, N3021, N3370, N3982, N4639, N4038, N4536, N1015, 
+        #      N1365, N3447, N7250; 
+        # C/SN hosts: N1448, N1309, U9391, N5917, N5584, N3972, M101,
+        #             N4424, N2442
+        n_ch_d = 2
+        n_ch_p = 15
+        n_ch_c = 11
+        n_ch_s = 9
+        n_c_ch = np.concatenate((np.array([139, 775]), \
+                                 np.ones(n_ch_p, dtype=int), \
+                                 np.array([372, 18, 63, 16, 25, 13, \
+                                           33, 14, 32, 80, 22, 54, \
+                                           44, 28, 13, 83, 42, 251, \
+                                           3, 141])))
+        zp_off_mask = np.zeros(len(n_c_ch))
+        zp_off_mask[1: n_ch_p + 2] = 1.0
+        n_s = 27
     else:
         # R16 preferred fit
         # anchors: NGC4258, LMC, MW C; cal: M31; 19 C/SN hosts
@@ -188,19 +212,29 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
     abs_mag_c_std = 26.3 - mu_anc[0]
     slope_p = -3.05
     slope_z = -0.25
-    if "r16" in setup or setup == "not_so_simple":
+    if "r16" in setup or setup == "not_so_simple" or setup == "d17":
         sig_app_mag_c_mean = 0.276
         sig_int_c = 0.065
-        sig_app_mag_s_ch_mean = 0.064
+        if setup == "d17":
+            sig_app_mag_s_ch_mean = 0.02769
+        else:
+            sig_app_mag_s_ch_mean = 0.064
     else:
         sig_app_mag_c_mean = 0.3
         sig_int_c = 0.21
         sig_app_mag_s_ch_mean = 0.1
     sig_int_s = 0.1
-    sig_z_s = 0.00001
+    if setup == "d17":
+        sig_z_s = 0.001
+    else:
+        sig_z_s = 0.00001
     sig_v_pec = 250.0 # km s^-1
     sig_z_s_tot = np.sqrt(sig_z_s ** 2 + (sig_v_pec / c) ** 2)
-    abs_mag_s_std = -19.2
+    if setup == "d17":
+        abs_mag_s_std = -18.524
+        sig_app_mag_s_mean = 0.05192
+    else:
+        abs_mag_s_std = -19.2
     alpha_s = -0.14
     beta_s = 3.1
     cov_s = np.array([[0.00396, 0.00186, 0.00163],
@@ -223,7 +257,10 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
         f_out_s = 0.0
         dmag_out_s = 0.0
         sig_out_s = 1.0
-    h_0 = 71.1        # km s^-1 Mpc^-1
+    if setup == "d17":
+        h_0 = 72.78
+    else:
+        h_0 = 71.10
     est_q_0 = -0.5575 # Betoule et al. 2014
     sig_q_0 =  0.0510 # Betoule et al. 2014
     j_0 = 1.0         # FIXED by assumption of flat LCDM universe
@@ -266,6 +303,11 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
                                      r16_sh0es_mu[0: n_ch - n_ch_g]))
     elif setup == "r16":
         true_mu_ch = np.concatenate((mu_anc, r16_cal_m31_mu, r16_sh0es_mu))
+    elif setup == "d17":
+        ordering = [0, 1, 3, 4, 6, 7, 8, 9, 11, 12] + \
+                   [10, 2, 15, 13, 5, 16, 18, 14, 17]
+        true_mu_ch = np.concatenate((mu_anc, r16_cal_m31_mu, \
+                                     r16_sh0es_mu[ordering]))
     else:
         #true_mu_ch = np.concatenate((mu_anc, np.array([31.83])))
         true_mu_ch = np.concatenate((mu_anc, \
@@ -335,9 +377,25 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
     mp.hist(res_to_plot, bins = 30)
     mp.show()
 
-    # simulate SH0ES SNe: already have their true distances
+    # simulate SH0ES SNe: already have their true distances. no 
+    # intrinsic scatter in r16 sims, though there probably should be
     print 'simulating {:d} supernovae'.format(n_ch_s + n_s)
-    est_app_mag_s_ch = abs_mag_s_std + true_mu_ch[n_ch_g + n_ch_c:] + \
+    true_app_mag_s_ch = abs_mag_s_std + \
+                        true_mu_ch[n_ch_g + n_ch_c:]
+    if setup == "d17":
+        if model_outliers == "ht":
+            true_app_mag_s_ch += npr.standard_t(st_nu_s, n_ch_s) * \
+                                 sig_int_s
+        else:
+            outliers = npr.uniform(0.0, 1.0, n_ch_s) < f_out_s
+            io_ch_s = np.array(outliers, dtype = np.int)
+            sig_extra = np.ones(n_ch_s) * sig_int_s
+            sig_extra[outliers] = sig_out_s
+            offset = np.zeros(n_ch_s)
+            offset[outliers] = dmag_out_s
+            true_app_mag_s_ch += npr.normal(0.0, 1.0, n_ch_s) * \
+                                 sig_extra + offset
+    est_app_mag_s_ch = true_app_mag_s_ch + \
                        npr.normal(0.0, sig_app_mag_s_ch_mean, n_ch_s)
     sig_app_mag_s_ch = np.ones(n_ch_s) * sig_app_mag_s_ch_mean
 
@@ -352,13 +410,14 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
     # optionally include SNe outliers
     true_z_s = npr.uniform(z_s_min, z_s_max, n_s)
     true_dis_s = z2d(true_z_s)
-    true_ff_s = npr.multivariate_normal(ff_s_mean, \
-                                        np.diag(ff_s_sigma ** 2), \
-                                        n_s)
     true_app_mag_s = abs_mag_s_std + \
-                     5.0 * np.log10(true_dis_s) - 5.0 + \
-                     alpha_s * true_ff_s[:, 0] + \
-                     beta_s * true_ff_s[:, 1]
+                     5.0 * np.log10(true_dis_s) - 5.0
+    if setup != "d17":
+        true_ff_s = npr.multivariate_normal(ff_s_mean, \
+                                            np.diag(ff_s_sigma ** 2), \
+                                            n_s)
+        true_app_mag_s += alpha_s * true_ff_s[:, 0] + \
+                          beta_s * true_ff_s[:, 1]
     if model_outliers == "ht":
         true_app_mag_s += npr.standard_t(st_nu_s, n_s) * sig_int_s
     else:
@@ -369,24 +428,37 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
         offset = np.zeros(n_s)
         offset[outliers] = dmag_out_s
         true_app_mag_s += npr.normal(0.0, 1.0, n_s) * sig_extra + offset
-    corr_noise_s = npr.multivariate_normal([0, 0, 0], cov_s, n_s)
-    est_ff_s = true_ff_s + corr_noise_s[:, 1:]
     if not fix_redshifts:
         est_z_s = true_z_s + npr.normal(0.0, sig_z_s_tot, n_s)
     else:
         est_z_s = true_z_s
-    est_app_mag_s = true_app_mag_s + corr_noise_s[:, 0]
-    sig_app_mag_s = np.ones(n_s) * np.sqrt(cov_s[0, 0])
-    sig_x_1_s = np.ones(n_s) * np.sqrt(cov_s[1, 1])
-    sig_c_s = np.ones(n_s) * np.sqrt(cov_s[2, 2])
-    cov_x_1_app_mag_s = np.ones(n_s) * cov_s[0, 1]
-    cov_c_app_mag_s = np.ones(n_s) * cov_s[0, 2]
-    cov_x_1_c_s = np.ones(n_s) * cov_s[1, 2]
-    print 'input high-z SN parameter observation covariance:'
-    print cov_s
-    print 'sample high-z SN parameter observation covariance:'
-    print np.cov(corr_noise_s.transpose())
-    res_to_plot = true_app_mag_s - \
+    if setup == "d17":
+        est_app_mag_s = true_app_mag_s + npr.normal(0.0, 1.0, n_s) * \
+                        sig_app_mag_s_mean
+        sig_app_mag_s = np.ones(n_s) * sig_app_mag_s_mean
+        est_ff_s = np.array([[0.0, 0.0, 0.0],
+                             [0.0, 0.0, 0.0],
+                             [0.0, 0.0, 0.0]])
+        sig_x_1_s = None
+        sig_c_s = None
+        cov_x_1_app_mag_s = None
+        cov_c_app_mag_s = None
+        cov_x_1_c_s = None
+    else:
+        corr_noise_s = npr.multivariate_normal([0, 0, 0], cov_s, n_s)
+        est_ff_s = true_ff_s + corr_noise_s[:, 1:]
+        est_app_mag_s = true_app_mag_s + corr_noise_s[:, 0]
+        sig_app_mag_s = np.ones(n_s) * np.sqrt(cov_s[0, 0])
+        sig_x_1_s = np.ones(n_s) * np.sqrt(cov_s[1, 1])
+        sig_c_s = np.ones(n_s) * np.sqrt(cov_s[2, 2])
+        cov_x_1_app_mag_s = np.ones(n_s) * cov_s[0, 1]
+        cov_c_app_mag_s = np.ones(n_s) * cov_s[0, 2]
+        cov_x_1_c_s = np.ones(n_s) * cov_s[1, 2]
+        print 'input high-z SN parameter observation covariance:'
+        print cov_s
+        print 'sample high-z SN parameter observation covariance:'
+        print np.cov(corr_noise_s.transpose())
+    res_to_plot = est_app_mag_s - \
                   (abs_mag_s_std + 5.0 * np.log10(true_dis_s) - 5.0)
     fig, axes = mp.subplots(1, 2)
     axes[0].hist(res_to_plot, bins = 30, normed = True)
