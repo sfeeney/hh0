@@ -6,7 +6,7 @@ Authors
  - Stephen Feeney, Daniel Mortlock and Niccolò Dalmasso
  - Stephen Feeney, Hiranya Peiris, Andrew Williamson, Samaya Nissanke, Daniel Mortlock, Justin Alsing and Dan Scolnic
 
-**Clarifying the Hubble constant tension with a Bayesian hierarchical model of the local distance ladder**
+### Clarifying the Hubble constant tension with a Bayesian hierarchical model of the local distance ladder
 
 A more complete README is incoming, as is a more user-friendly interface. For now, note the following dependencies
 
@@ -38,7 +38,7 @@ setup = 'r16'               # dataset: try 'r16' (1604.01424) or 'd17' (1707.007
 sim = True                  # fit existing data or simulation
 ```
 
-**Prospects for resolving the Hubble constant tension with standard sirens**
+### Prospects for resolving the Hubble constant tension with standard sirens
 
 Note the following dependencies:
 
@@ -48,4 +48,4 @@ Note the following dependencies:
  - [GetDist](http://getdist.readthedocs.io/en/latest/intro.html)
  - [scikit-learn](http://scikit-learn.org/stable/install.html)
 
-Try `python h_of_z.py` to investigate inverse distance ladder constraints, and `python gw_grb_h_0_ppd.py` (or `mpirun -np X python gw_grb_h_0_ppd.py` if you have MPI4PY installed and want to use it) to run the binary neutron star merger code.
+Try `python h_of_z.py` to produce inverse distance ladder constraints, and `python gw_grb_h_0_ppd.py` (or `mpirun -np X python gw_grb_h_0_ppd.py` if you have MPI4PY installed and want to use it) to generate binary neutron star merger constraints.
