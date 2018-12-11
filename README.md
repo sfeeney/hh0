@@ -1,10 +1,11 @@
 # hh0
 
-Code used in [arXiv:1707.00007](https://arxiv.org/abs/1707.00007) ("Clarifying the Hubble constant tension with a Bayesian hierarchical model of the local distance ladder") and [arXiv:1802.03404](https://arxiv.org/abs/1802.03404) ("Prospects for resolving the Hubble constant tension with standard sirens").
+Code used in [arXiv:1707.00007](https://arxiv.org/abs/1707.00007) ("Clarifying the Hubble constant tension with a Bayesian hierarchical model of the local distance ladder"); [arXiv:1802.03404](https://arxiv.org/abs/1802.03404) ("Prospects for resolving the Hubble constant tension with standard sirens"); and [arXiv:1811.11723](https://arxiv.org/abs/1811.11723) ("Unbiased Hubble constant estimation from binary neutron star mergers").
 
 Authors
- - Stephen Feeney, Daniel Mortlock and Niccolò Dalmasso
- - Stephen Feeney, Hiranya Peiris, Andrew Williamson, Samaya Nissanke, Daniel Mortlock, Justin Alsing and Dan Scolnic
+ - Stephen Feeney, Daniel Mortlock and Niccolò Dalmasso ([arXiv:1707.00007](https://arxiv.org/abs/1707.00007))
+ - Stephen Feeney, Hiranya Peiris, Andrew Williamson, Samaya Nissanke, Daniel Mortlock, Justin Alsing and Dan Scolnic ([arXiv:1802.03404](https://arxiv.org/abs/1802.03404))
+ - Daniel Mortlock, Stephen Feeney, Hiranya Peiris, Andrew Williamson and Samaya Nissanke ([arXiv:1811.11723](https://arxiv.org/abs/1811.11723))
 
 ### Clarifying the Hubble constant tension with a Bayesian hierarchical model of the local distance ladder
 
@@ -48,4 +49,34 @@ Note the following dependencies:
  - [GetDist](http://getdist.readthedocs.io/en/latest/intro.html)
  - [scikit-learn](http://scikit-learn.org/stable/install.html)
 
-Try `python h_of_z.py` to produce inverse distance ladder constraints, and `python gw_grb_h_0_ppd.py` (or `mpirun -np X python gw_grb_h_0_ppd.py` if you have MPI4PY installed and want to use it) to generate binary neutron star merger constraints.
+Try `python h_of_z.py` to produce inverse distance ladder constraints, and `python gw_grb_h_0_ppd.py` (or `mpirun -np X python gw_grb_h_0_ppd.py` if you have mpi4py installed and want to use it) to generate binary neutron star merger constraints.
+
+### Unbiased Hubble constant estimation from binary neutron star mergers
+
+Note the following dependencies:
+
+ - [PyStan](https://pystan.readthedocs.io/en/latest/)
+ - [GetDist](http://getdist.readthedocs.io/en/latest/intro.html)
+ - [h5py](http://docs.h5py.org/en/latest/build.html)
+ - [mpi4py](https://mpi4py.readthedocs.io/en/stable/install.html) (recommended)
+
+The main code is contained in `bias_test_stan.py`. This generates simple simulations of catalogues of binary neutron star mergers, selected by their gravitational-wave signal to noise, and then samples either their distances and inclinations (conditioned on the measured strains only) or the cosmological parameters (Hubble constant and deceleration parameter, if selected) conditioned on both gravitational-wave and electromagnetic observations. It can be run using `mpirun -np X python bias_test_stan.py` if you have MPI4PY installed and want to use it, which you should unless you have a lot of time. By default, Stan uses 4 OpenMP threads to sample, so use 4 CPUs per MPI process and set `OMP_NUM_THREADS=4`. Additional plots for the paper were produced using `python bias_test_stan_plots.py`.
+
+A lot of variables can be changed in `bias_test_stan.py` to set up different runs, the most useful of which are explained below. Any changes should also be made to `bias_test_stan_plots.py` to process the resulting outputs.
+```python
+n_event = 100                   # Catalogue size
+n_rpt = 1                       # Number of catalogues to simulate
+use_mpi = True                  # Use MPI? Yes!
+constrain = True                # Use a standard initial seed to generate simulations?
+sample = True                   # Sample or not? Turn off to save time plotting
+n_samples = 1000                # Number of samples to take per chain: half will be discarded as warmup by Stan
+n_chains = 4                    # Number of Stan chains
+recompile = True                # Recompile Stan code: do this once then turn off to save time
+fixed_n_bns = False             # Fix the catalogue size when sampling
+ntlo = True                     # Adopt a quadratic Hubble law with variable q_0
+vary_m_c = True                 # Draw chirp masses from a Gaussian rather than fixing them all to one value
+inc_rate_redshift = True        # Include rate redshifting in inference 
+plot_dist_cos_i_posts = False   # Plot gravitational-wave-only distance and inclination posteriors
+sample_dist_cos_i_posts = False # Sample gravitational-wave-only distance and inclination posteriors
+find_n_bar = True               # Find parameter-dependent fit to number of detectable merger events: do once then turn off
+```
