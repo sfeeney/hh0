@@ -1,10 +1,12 @@
 # hh0
-Hierarchical Hubble Constant Inference
+
+Code used in [arXiv:1707.00007](https://arxiv.org/abs/1707.00007) ("Clarifying the Hubble constant tension with a Bayesian hierarchical model of the local distance ladder") and [arXiv:1802.03404](https://arxiv.org/abs/1802.03404) ("Prospects for resolving the Hubble constant tension with standard sirens").
 
 Authors
- - Stephen Feeney
- - Daniel Mortlock
- - Niccolò Dalmasso
+ - Stephen Feeney, Daniel Mortlock and Niccolò Dalmasso
+ - Stephen Feeney, Hiranya Peiris, Andrew Williamson, Samaya Nissanke, Daniel Mortlock, Justin Alsing and Dan Scolnic
+
+### Clarifying the Hubble constant tension with a Bayesian hierarchical model of the local distance ladder
 
 A more complete README is incoming, as is a more user-friendly interface. For now, note the following dependencies
 
@@ -35,3 +37,15 @@ stan_constrain = True       # fix random seed in sampling run
 setup = 'r16'               # dataset: try 'r16' (1604.01424) or 'd17' (1707.00715)
 sim = True                  # fit existing data or simulation
 ```
+
+### Prospects for resolving the Hubble constant tension with standard sirens
+
+Note the following dependencies:
+
+ - [emcee](http://dfm.io/emcee/current/)
+ - [PyStan](https://pystan.readthedocs.io/en/latest/)
+ - [corner](http://corner.readthedocs.io/en/latest/)
+ - [GetDist](http://getdist.readthedocs.io/en/latest/intro.html)
+ - [scikit-learn](http://scikit-learn.org/stable/install.html)
+
+Try `python h_of_z.py` to produce inverse distance ladder constraints, and `python gw_grb_h_0_ppd.py` (or `mpirun -np X python gw_grb_h_0_ppd.py` if you have MPI4PY installed and want to use it) to generate binary neutron star merger constraints.
