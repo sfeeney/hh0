@@ -1,5 +1,9 @@
 # hh0
 
+[![arXiv](https://img.shields.io/badge/arXiv-1707.00007-red.svg)](https://arxiv.org/abs/1707.00007)
+[![arXiv](https://img.shields.io/badge/arXiv-1802.03404-orange.svg)](https://arxiv.org/abs/1802.03404)
+[![arXiv](https://img.shields.io/badge/arXiv-1811.11723-yellow.svg)](https://arxiv.org/abs/1811.11723)
+
 Code used in [arXiv:1707.00007](https://arxiv.org/abs/1707.00007) ("Clarifying the Hubble constant tension with a Bayesian hierarchical model of the local distance ladder"); [arXiv:1802.03404](https://arxiv.org/abs/1802.03404) ("Prospects for resolving the Hubble constant tension with standard sirens"); and [arXiv:1811.11723](https://arxiv.org/abs/1811.11723) ("Unbiased Hubble constant estimation from binary neutron star mergers").
 
 Authors
