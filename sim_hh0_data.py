@@ -313,7 +313,7 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
         true_mu_ch = np.concatenate((mu_anc, \
                                      r16_sh0es_mu[0: n_ch - n_ch_g]))
     true_dis_ch = 10.0 ** ((true_mu_ch + 5.0) / 5.0)
-    print 'simulating {:d} Cepheids'.format(np.sum(n_c_ch))
+    print('simulating {:d} Cepheids'.format(np.sum(n_c_ch)))
 
     # loop over SH0ES hosts
     i_res = 0
@@ -379,7 +379,7 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
 
     # simulate SH0ES SNe: already have their true distances. no 
     # intrinsic scatter in r16 sims, though there probably should be
-    print 'simulating {:d} supernovae'.format(n_ch_s + n_s)
+    print('simulating {:d} supernovae'.format(n_ch_s + n_s))
     true_app_mag_s_ch = abs_mag_s_std + \
                         true_mu_ch[n_ch_g + n_ch_c:]
     if setup == "d17":
@@ -454,10 +454,10 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
         cov_x_1_app_mag_s = np.ones(n_s) * cov_s[0, 1]
         cov_c_app_mag_s = np.ones(n_s) * cov_s[0, 2]
         cov_x_1_c_s = np.ones(n_s) * cov_s[1, 2]
-        print 'input high-z SN parameter observation covariance:'
-        print cov_s
-        print 'sample high-z SN parameter observation covariance:'
-        print np.cov(corr_noise_s.transpose())
+        print('input high-z SN parameter observation covariance:')
+        print(cov_s)
+        print('sample high-z SN parameter observation covariance:')
+        print(np.cov(corr_noise_s.transpose()))
     res_to_plot = est_app_mag_s - \
                   (abs_mag_s_std + 5.0 * np.log10(true_dis_s) - 5.0)
     fig, axes = mp.subplots(1, 2)
@@ -484,25 +484,27 @@ def hh0_sim(setup="not_so_simple", fix_redshifts=True, \
             est_app_mag_s_ch[i] = np.float('{:5.5g}'.format(est_app_mag_s_ch[i]))
 
     # sim info
-    print 'true abs_mag_c_std: ', abs_mag_c_std
-    print 'true slope_p:       ', slope_p
+    print('true abs_mag_c_std: ', abs_mag_c_std)
+    print('true slope_p:       ', slope_p)
     if inc_met_dep:
-        print 'true slope_z:       ', slope_z
-    print 'true sig_int:       ', sig_int_c
+        print('true slope_z:       ', slope_z)
+    print('true sig_int:       ', sig_int_c)
     if model_outliers == "gmm":
-        print 'true f_out_c:       ', f_out_c
-        print 'true dmag_out_c:    ', dmag_out_c
-        print 'true sig_out_c:     ', sig_out_c
-        print 'true f_out_s:       ', f_out_s
-        print 'true dmag_out_s:    ', dmag_out_s
-        print 'true sig_out_s:     ', sig_out_s
-    print 'true abs_mag_s_std: ', abs_mag_s_std
-    print 'true true_mu_h:     ', np.array_str(true_mu_ch, precision = 2)
-    print 'true h_0:           ', h_0
+        print('true f_out_c:       ', f_out_c)
+        print('true dmag_out_c:    ', dmag_out_c)
+        print('true sig_out_c:     ', sig_out_c)
+        print('true f_out_s:       ', f_out_s)
+        print('true dmag_out_s:    ', dmag_out_s)
+        print('true sig_out_s:     ', sig_out_s)
+    print('true abs_mag_s_std: ', abs_mag_s_std)
+    print('true true_mu_h:     ', np.array_str(true_mu_ch, precision = 2))
+    print('true h_0:           ', h_0)
     sim_info = {'abs_mag_c_std': abs_mag_c_std, \
                 'slope_p': slope_p, 'sig_int_c': sig_int_c, \
                 'abs_mag_s_std': abs_mag_s_std, \
-                'true_mu_ch': true_mu_ch, 'h_0': h_0}
+                'sig_int_s': sig_int_s, \
+                'true_mu_ch': true_mu_ch, 'h_0': h_0, 'q_0': est_q_0, \
+                'alpha_s': alpha_s, 'beta_s': beta_s}
     if inc_met_dep:
         sim_info['slope_z'] = slope_z
     if model_outliers == "gmm":

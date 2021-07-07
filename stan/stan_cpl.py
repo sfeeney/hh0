@@ -19,14 +19,17 @@ mp.rcParams['lines.linewidth'] = 1.5
 def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
               app_mag_err_c, p_c, sig_int_c, mu_anc, sig_mu_anc, \
               zp_off_mask, sig_zp_off, app_mag_s, app_mag_err_s, \
-              sig_int_s, log_z_c = None):
-    
+              sig_int_s, log_z_c = None, prior_s_p = None, \
+              prior_s_z = None):
+
     # helpful parameters
     # n_obs is one magnitude per Cepheid and SN, plus one constraint
     # per anchor and one more for the zero-point offset
     # n_par is one delta-mu per distance anchor (not parallax), one 
     # mu per calibrator/C+SN host, 2+1 CPL params, 1 SN param and the
-    # zero-point offset 
+    # zero-point offset
+    # ORDER is one mu per calibrator/C+SN host, M^c, s^p, d_zp, M^s
+    # one d_mu per distance (not parallax) anchor, s^z
     n_ch = len(n_c_ch)
     n_ch_g = n_ch_d + n_ch_p
     n_c_tot = np.sum(n_c_ch)
@@ -34,6 +37,10 @@ def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
     n_par = n_ch_d + n_ch_c + n_ch_s + 4
     if log_z_c is not None:
         n_par += 1
+    if prior_s_p is not None:
+        n_obs += 1
+    if prior_s_z is not None:
+        n_obs += 1
     y_vec = np.zeros(n_obs)
     l_mat = np.zeros((n_obs, n_par))
     c_mat_inv = np.zeros((n_obs, n_obs))
@@ -86,6 +93,18 @@ def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
         c_mat_inv[k, k] = 1.0 / sig_mu_anc[i] ** 2
         k += 1
 
+    # and, finally, any slope priors desired
+    if prior_s_p is not None:
+        y_vec[k] = prior_s_p[0]
+        l_mat[k, n_ch - n_ch_g + 1] = 1.0
+        c_mat_inv[k, k] = 1.0 / prior_s_p[1] ** 2
+        k += 1
+    if prior_s_z is not None:
+        y_vec[k] = prior_s_z[0]
+        l_mat[k, n_ch - n_ch_p + 4] = 1.0
+        c_mat_inv[k, k] = 1.0 / prior_s_z[1] ** 2
+        k += 1
+        
     # fit, calculate residuals in useable form and return
     ltci = np.dot(l_mat.transpose(), c_mat_inv)
     q_hat_cov = np.linalg.inv(np.dot(ltci, l_mat))
@@ -110,6 +129,11 @@ def riess_reject(n_c_ch, app_mag_err_c, sig_int_c, res, threshold = 2.7):
                                               sig_int_c ** 2)
     to_rej = np.unravel_index(np.argmax(res_scaled), res.shape)
     if res_scaled[to_rej] > threshold:
+        hosts = ["N4258", "N3021", "N3370", "N1309", "N3982", "N4639", \
+                 "N5584", "N4038", "N4536", "N1015", "N1365", \
+                 "N1448", "N3447", "N7250", "N5917", "N4424", \
+                 "U9391", "N3972", "N2442", "M101"]
+        print(hosts[to_rej[0]], to_rej[1] + 1)#, res_scaled[to_rej]
         return to_rej
     else:
         return None
@@ -127,6 +151,7 @@ n_chains = 4
 n_samples = 10000
 recompile = True
 use_riess_rejection = False
+ceph_only = False
 sne_sum = False
 gauss_mu_like = False
 fix_redshifts = False
@@ -137,15 +162,20 @@ nir_sne = False
 inc_zp_off = True
 round_data = False
 fit_cosmo_delta = None # None, 'h', 'hq'
+v_pla = 2015 # 2015, 2016
 save_full_fit = False
 save_d_anc = True
+save_host_mus = False
 constrain = True
 stan_constrain = True
-setup = "r16"
-sim = True
+setup = "rd19_one_anc"
+sim = False
+max_col_c = None # None or maximum V-I colour to include
 
 # determine basis of filename
-if sne_sum:
+if ceph_only:
+    base = 'stan_cpl'
+elif sne_sum:
     base = 'stan_hh0_sne_sum'
     if gauss_mu_like:
         base += '_gauss_mu_like'
@@ -189,7 +219,8 @@ else:
     outputs = ph0.hh0_parse(dataset = setup, \
                             fix_redshifts = fix_redshifts, \
                             inc_met_dep = inc_met_dep, \
-                            model_outliers = model_outliers)
+                            model_outliers = model_outliers, \
+                            max_col_c = max_col_c)
     n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, n_s, dis_anc, \
     sig_dis_anc, est_app_mag_c, sig_app_mag_c, est_p_c, sig_int_c, \
     est_app_mag_s_ch, sig_app_mag_s_ch, est_app_mag_s, \
@@ -209,14 +240,25 @@ n_ch_g = n_ch_d + n_ch_p
 # differ from the local values (and fit for them separately), specify
 # the cosmological estimates
 if fit_cosmo_delta == 'h':
-    est_h_0 = 67.81
-    sig_h_0 = 0.92
+    if v_pla == 2015:
+        est_h_0 = 67.81
+        sig_h_0 = 0.92
+    elif v_pla == 2016:
+        est_h_0 = 66.93
+        sig_h_0 = 0.62
 elif fit_cosmo_delta == 'hq':
-    est_h_0 = 67.81
-    sig_h_0 = 0.92
-    est_q_0 = -0.5381
-    sig_q_0 = 0.0184
-    rho = -0.99
+    if v_pla == 2015:
+        est_h_0 = 67.81
+        sig_h_0 = 0.92
+        est_q_0 = -0.5381
+        sig_q_0 = 0.0184
+        rho = -0.99 # -0.994 probably better: -0.99 used in paper
+    elif v_pla == 2016: # my rerun: 2015 low-p+TTTEEE + tau prior
+        est_h_0 = 66.745
+        sig_h_0 = 0.61525
+        est_q_0 = -0.51552
+        sig_q_0 = 0.013234
+        rho = -0.994
     mu_exp_c = np.array((est_h_0, est_q_0))
     cov_exp_c = np.array(((sig_h_0 ** 2, rho * sig_h_0 * sig_q_0),\
                           (rho * sig_h_0 * sig_q_0, sig_q_0 ** 2)))
@@ -297,55 +339,55 @@ rfit_sig_log_h_0 = np.sqrt(rfit_err[n_ch - n_ch_p + 3] ** 2 / 25.0 + \
 rfit_sig_h_0 = rfit_h_0 * np.log(10.0) * rfit_sig_log_h_0
 
 # report results, H_0 fit and its uncertainty
-print 'Riess iterative fitting: '
-print ' {:} rejected, chi^2/dof = {:5.3f}'.format(n_rej, rfit_chisq)
+print('Riess iterative fitting: ')
+print(' {:} rejected, chi^2/dof = {:5.3f}'.format(n_rej, rfit_chisq))
 if sim:
     for i in range(0, n_ch_d):
-        print ' mu_{0:d}: {1:7.5f} +/- {2:7.5f} ({3:7.5f})'.format(i + 1, \
+        print(' mu_{0:d}: {1:7.5f} +/- {2:7.5f} ({3:7.5f})'.format(i + 1, \
             rfit[n_ch - n_ch_g + 3 + i] + sim_info['true_mu_ch'][i], \
             rfit_err[n_ch - n_ch_g + 3 + i], \
-            sim_info['true_mu_ch'][i])
+            sim_info['true_mu_ch'][i]))
     for i in range(0, n_ch_p):
-        print ' mu_{0:d}: not estimated by Riess et al.'.format(i + n_ch_d + 1)
+        print(' mu_{0:d}: not estimated by Riess et al.'.format(i + n_ch_d + 1))
     for i in range(0, n_ch - n_ch_g):
-        print ' mu_{0:d}: {1:7.5f} +/- {2:7.5f} ({3:7.5f})'.format(i + n_ch_g + 1, \
-            rfit[i], rfit_err[i], sim_info['true_mu_ch'][i + n_ch_g])
-    print ' intcpt: {0:7.4f} +/- {1:7.5f} ({2:7.4f})'.format(rfit[n_ch_c + n_ch_s], \
-        rfit_err[n_ch_c + n_ch_s], sim_info['abs_mag_c_std'])
-    print ' slope_p: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit[n_ch_c + n_ch_s + 1], \
-        rfit_err[n_ch_c + n_ch_s + 1], sim_info['slope_p'])
+        print(' mu_{0:d}: {1:7.5f} +/- {2:7.5f} ({3:7.5f})'.format(i + n_ch_g + 1, \
+            rfit[i], rfit_err[i], sim_info['true_mu_ch'][i + n_ch_g]))
+    print(' intcpt: {0:7.4f} +/- {1:7.5f} ({2:7.4f})'.format(rfit[n_ch_c + n_ch_s], \
+        rfit_err[n_ch_c + n_ch_s], sim_info['abs_mag_c_std']))
+    print(' slope_p: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit[n_ch_c + n_ch_s + 1], \
+        rfit_err[n_ch_c + n_ch_s + 1], sim_info['slope_p']))
     if inc_met_dep:
-        print ' slope_z: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit[-1], \
-            rfit_err[-1], sim_info['slope_z'])
-    print ' m_0^SN: {0:7.4f} +/- {1:7.5f} ({2:7.4f})'.format(rfit[n_ch - n_ch_p + 3], \
-        rfit_err[n_ch - n_ch_p + 3], sim_info['abs_mag_s_std'])
-    print ' zp_off: {0:7.4f} +/- {1:7.5f} ({2:7.4f})'.format(rfit[n_ch - n_ch_g + 2], \
-        rfit_err[n_ch - n_ch_g + 2], sim_info['zp_off'])
-    print ' H_0: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit_h_0, \
-        rfit_sig_h_0, sim_info['h_0'])
+        print(' slope_z: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit[-1], \
+            rfit_err[-1], sim_info['slope_z']))
+    print(' m_0^SN: {0:7.4f} +/- {1:7.5f} ({2:7.4f})'.format(rfit[n_ch - n_ch_p + 3], \
+        rfit_err[n_ch - n_ch_p + 3], sim_info['abs_mag_s_std']))
+    print(' zp_off: {0:7.4f} +/- {1:7.5f} ({2:7.4f})'.format(rfit[n_ch - n_ch_g + 2], \
+        rfit_err[n_ch - n_ch_g + 2], sim_info['zp_off']))
+    print(' H_0: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit_h_0, \
+        rfit_sig_h_0, sim_info['h_0']))
 else:
     for i in range(0, n_ch_d):
-        print ' mu_{0:d}: {1:7.5f} +/- {2:7.5f}'.format(i + 1, \
+        print(' mu_{0:d}: {1:7.5f} +/- {2:7.5f}'.format(i + 1, \
             rfit[n_ch - n_ch_g + 3 + i] + mu_anc[i], \
-            rfit_err[n_ch - n_ch_g + 3 + i])
+            rfit_err[n_ch - n_ch_g + 3 + i]))
     for i in range(0, n_ch_p):
-        print ' mu_{0:d}: not estimated by Riess et al.'.format(i + n_ch_d + 1)
+        print(' mu_{0:d}: not estimated by Riess et al.'.format(i + n_ch_d + 1))
     for i in range(0, n_ch - n_ch_g):
-        print ' mu_{0:d}: {1:7.5f} +/- {2:7.5f}'.format(i + n_ch_g + 1, \
-            rfit[i], rfit_err[i])
-    print ' intcpt: {0:7.4f} +/- {1:7.5f}'.format(rfit[n_ch_c + n_ch_s], \
-        rfit_err[n_ch_c + n_ch_s])
-    print ' slope_p: {0:8.5f} +/- {1:7.5f}'.format(rfit[n_ch_c + n_ch_s + 1], \
-        rfit_err[n_ch_c + n_ch_s + 1])
+        print(' mu_{0:d}: {1:7.5f} +/- {2:7.5f}'.format(i + n_ch_g + 1, \
+            rfit[i], rfit_err[i]))
+    print(' intcpt: {0:7.4f} +/- {1:7.5f}'.format(rfit[n_ch_c + n_ch_s], \
+        rfit_err[n_ch_c + n_ch_s]))
+    print(' slope_p: {0:8.5f} +/- {1:7.5f}'.format(rfit[n_ch_c + n_ch_s + 1], \
+        rfit_err[n_ch_c + n_ch_s + 1]))
     if inc_met_dep:
-        print ' slope_z: {0:8.5f} +/- {1:7.5f}'.format(rfit[-1], \
-            rfit_err[-1])
-    print ' m_0^SN: {0:7.4f} +/- {1:7.5f}'.format(rfit[n_ch - n_ch_p + 3], \
-        rfit_err[n_ch - n_ch_p + 3])
-    print ' zp_off: {0:7.4f} +/- {1:7.5f}'.format(rfit[n_ch - n_ch_g + 2], \
-        rfit_err[n_ch - n_ch_g + 2])
-    print ' H_0: {0:8.5f} +/- {1:7.5f}'.format(rfit_h_0, \
-          rfit_sig_h_0)
+        print(' slope_z: {0:8.5f} +/- {1:7.5f}'.format(rfit[-1], \
+            rfit_err[-1]))
+    print(' m_0^SN: {0:7.4f} +/- {1:7.5f}'.format(rfit[n_ch - n_ch_p + 3], \
+        rfit_err[n_ch - n_ch_p + 3]))
+    print(' zp_off: {0:7.4f} +/- {1:7.5f}'.format(rfit[n_ch - n_ch_g + 2], \
+        rfit_err[n_ch - n_ch_g + 2]))
+    print(' H_0: {0:8.5f} +/- {1:7.5f}'.format(rfit_h_0, \
+          rfit_sig_h_0))
 
 # save results (trimmed parameter covariance matrix) to file.
 # order is: M^c, s^p, [s^Z,] M^s. append independent a_x constraint
@@ -422,8 +464,8 @@ else:
         with open(base + '_model.pkl', 'rb') as f:
             stan_model = pickle.load(f)
     except EnvironmentError:
-        print 'ERROR: pickled Stan model (' + base + '_model.pkl) not found. ' + \
-              'Please set recompile = True'
+        print('ERROR: pickled Stan model (' + base + '_model.pkl) not found. ' + \
+              'Please set recompile = True')
         exit()
 
 # set up Stan data
@@ -502,7 +544,9 @@ else:
     stan_data['est_q_0'] = est_q_0
     stan_data['sig_q_0'] = sig_q_0
     stan_data['lk_corr'] = par_anc_lkc
-    if nir_sne:
+    if ceph_only:
+        stan_pars = ['abs_mag_c_std', 'slope_p', 'zp_off']
+    elif nir_sne:
         stan_pars = ['abs_mag_c_std', 'slope_p', 'zp_off', \
                      'abs_mag_s_std', 'h_0', 'q_0']
     else:
@@ -516,20 +560,22 @@ else:
         stan_data['n_mm_c'] = 2
         stan_data['n_mm_s'] = 2
         stan_pars.remove('abs_mag_c_std')
-        stan_pars.remove('abs_mag_s_std')
         stan_pars.append('f_mm_c')
         stan_pars.append('intcpt_mm_c')
         stan_pars.append('sig_mm_c')
-        stan_pars.append('f_mm_s')
-        stan_pars.append('intcpt_mm_s')
-        stan_pars.append('sig_mm_s')
-        
+        if not ceph_only:
+            stan_pars.remove('abs_mag_s_std')
+            stan_pars.append('f_mm_s')
+            stan_pars.append('intcpt_mm_s')
+            stan_pars.append('sig_mm_s')
     else:
         stan_pars.append('sig_int_c')
-        stan_pars.append('sig_int_s')
+        if not ceph_only:
+            stan_pars.append('sig_int_s')
         if model_outliers == "ht":
             stan_pars.append('nu_c')
-            stan_pars.append('nu_s')
+            if not ceph_only:
+                stan_pars.append('nu_s')
     if fit_cosmo_delta == 'h':
         stan_pars.append('delta_h_0')
         stan_data['est_h_0'] = est_h_0
@@ -549,7 +595,8 @@ if inc_met_dep:
     stan_pars.append('slope_z')
 if save_d_anc:
     stan_pars.append('true_d_anc')
-    #stan_pars.append('true_mu_h')
+if save_host_mus:
+    stan_pars.append('true_mu_h')
 if stan_constrain:
     stan_seed = 23102014
 else:
@@ -592,10 +639,11 @@ else:
         stan_pars[i] = 'true_d_anc.1'
         for j in range(1, n_ch_d + n_ch_p):
             stan_pars.insert(i + j, 'true_d_anc.{:d}'.format(j + 1))
-        '''i = stan_pars.index('true_mu_h')
+    if save_host_mus:
+        i = stan_pars.index('true_mu_h')
         stan_pars[i] = 'true_mu_h.1'
         for j in range(1, n_ch):
-            stan_pars.insert(i + j, 'true_mu_h.{:d}'.format(j + 1))'''
+            stan_pars.insert(i + j, 'true_mu_h.{:d}'.format(j + 1))
     hdr_str += 'lp__,' + ','.join(stan_pars)
     idx = len(stan_pars) + np.arange(0, len(stan_pars) + 1)
     idx = np.mod(idx, len(stan_pars) + 1)
@@ -603,84 +651,85 @@ else:
         np.savetxt(base + '_minimal_chain_{:d}.csv'.format(i), \
                    samples[:, i, idx], delimiter = ',', \
                    header = hdr_str, comments = '')
-print fit
+print(fit)
 
 # plot some of the fits and report percentiles
-samples = fit.extract(permuted = True)
-print '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 - 68.27 / 2.0)) + \
-      ' < H_0 < ' + \
-      '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 + 68.27 / 2.0)) + \
-      ' (68.3%)'
-print '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 - 95.45 / 2.0)) + \
-      ' < H_0 < ' + \
-      '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 + 95.45 / 2.0)) + \
-      ' (95.5%)'
-print '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 - 99.73 / 2.0)) + \
-      ' < H_0 < ' + \
-      '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 + 99.73 / 2.0)) + \
-      ' (99.7%)'
-if model_outliers:
-    mp.rcParams["figure.figsize"] = [24, 5]
-    fig, (ax_h_0, ax_intcpt, ax_sig) = mp.subplots(1, 3)
-else:
-    fig, ax_h_0 = mp.subplots()
-h_0_grid = np.linspace(55.0, 90.0, 1000)
-kde_h_0 = sps.gaussian_kde(samples['h_0'])
-ax_h_0.plot(h_0_grid, kde_h_0.evaluate(h_0_grid), 'b')
-if sim:
-    ax_h_0.plot([sim_info['h_0'], sim_info['h_0']], \
-                ax_h_0.get_ylim(), 'k--')
-rfit_h_0_pdf = np.exp(-0.5 * ((h_0_grid - rfit_h_0) / \
-                              rfit_sig_h_0) ** 2) / \
-               np.sqrt(2.0 * np.pi) / rfit_sig_h_0
-rfit_log_h_0_pdf = np.exp(-0.5 * ((np.log10(h_0_grid) - rfit_log_h_0) / \
-                                  rfit_sig_log_h_0) ** 2) / \
-               np.sqrt(2.0 * np.pi) / rfit_sig_log_h_0 / h_0_grid / \
-               np.log(10.0)
-ax_h_0.plot(h_0_grid, rfit_h_0_pdf, 'r--')
-ax_h_0.plot(h_0_grid, rfit_log_h_0_pdf, 'g--')
-ax_h_0.set_xlabel(r'$H_0$')
-ax_h_0.set_ylabel(r'$P(H_0)$')
-if model_outliers == "gmm":
-    intcpt_grid = np.linspace(-5.0, 0.0, 1000)
-    sig_grid = np.logspace(-1.5, 0.5, 1000)
-    kde_i0 = sps.gaussian_kde(samples['intcpt_mm_c'][:, 0])
-    kde_i1 = sps.gaussian_kde(samples['intcpt_mm_c'][:, 1])
-    kde_s0 = sps.gaussian_kde(samples['sig_mm_c'][:, 0])
-    kde_s1 = sps.gaussian_kde(samples['sig_mm_c'][:, 1])
-    ax_intcpt.plot(intcpt_grid, kde_i0.evaluate(intcpt_grid), 'r')
-    ax_intcpt.plot(intcpt_grid, kde_i1.evaluate(intcpt_grid), 'g')
-    ax_sig.semilogx(sig_grid, kde_s0.evaluate(sig_grid), 'r')
-    ax_sig.semilogx(sig_grid, kde_s1.evaluate(sig_grid), 'g')
+if not ceph_only:
+    samples = fit.extract(permuted = True)
+    print('{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 - 68.27 / 2.0)) + \
+          ' < H_0 < ' + \
+          '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 + 68.27 / 2.0)) + \
+          ' (68.3%)')
+    print('{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 - 95.45 / 2.0)) + \
+          ' < H_0 < ' + \
+          '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 + 95.45 / 2.0)) + \
+          ' (95.5%)')
+    print('{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 - 99.73 / 2.0)) + \
+          ' < H_0 < ' + \
+          '{:6.3f}'.format(np.percentile(samples['h_0'], 50.0 + 99.73 / 2.0)) + \
+          ' (99.7%)')
+    if model_outliers:
+        mp.rcParams["figure.figsize"] = [24, 5]
+        fig, (ax_h_0, ax_intcpt, ax_sig) = mp.subplots(1, 3)
+    else:
+        fig, ax_h_0 = mp.subplots()
+    h_0_grid = np.linspace(55.0, 90.0, 1000)
+    kde_h_0 = sps.gaussian_kde(samples['h_0'])
+    ax_h_0.plot(h_0_grid, kde_h_0.evaluate(h_0_grid), 'b')
     if sim:
-        ax_intcpt.plot([sim_info['abs_mag_c_std'], \
-                        sim_info['abs_mag_c_std']], \
-                       ax_intcpt.get_ylim(), 'k--')
-        ax_sig.plot([sim_info['sig_int_c'], sim_info['sig_int_c']], \
-                    ax_sig.get_ylim(), 'k--')
-        ax_sig.plot([sim_info['sig_out_c'], sim_info['sig_out_c']], \
-                    ax_sig.get_ylim(), 'k--')
-        ax_intcpt.plot([sim_info['abs_mag_c_std'] + sim_info['dmag_out_c'], \
-                        sim_info['abs_mag_c_std'] + sim_info['dmag_out_c']], \
-                       ax_intcpt.get_ylim(), 'k:')
-    ax_intcpt.set_xlabel(r'$M^{1\odot}$')
-    ax_intcpt.set_ylabel(r'$P(M^{1\odot})$')
-    ax_sig.set_xlabel(r'$\sigma_{i/o}$')
-    ax_sig.set_ylabel(r'$P(\sigma_{i/o})$')
-elif model_outliers == "ht":
-    intcpt_grid = np.linspace(-5.0, 0.0, 1000)
-    sig_grid = np.logspace(-1.5, 0.5, 1000)
-    kde_i0 = sps.gaussian_kde(samples['abs_mag_c_std'])
-    kde_s0 = sps.gaussian_kde(samples['sig_int_c'])
-    ax_intcpt.plot(intcpt_grid, kde_i0.evaluate(intcpt_grid), 'r')
-    ax_sig.semilogx(sig_grid, kde_s0.evaluate(sig_grid), 'r')
-    if sim:
-        ax_intcpt.plot([sim_info['abs_mag_c_std'], sim_info['abs_mag_c_std']], \
-                       ax_intcpt.get_ylim(), 'k--')
-        ax_sig.plot([sim_info['sig_int_c'], sim_info['sig_int_c']], \
-                    ax_sig.get_ylim(), 'k--')
-    ax_intcpt.set_xlabel(r'$M^{1\odot}$')
-    ax_intcpt.set_ylabel(r'$P(M^{1\odot})$')
-    ax_sig.set_xlabel(r'$\sigma_{i/o}$')
-    ax_sig.set_ylabel(r'$P(\sigma_{i/o})$')
-mp.savefig(base + '_constraints.pdf', bbox_inches = 'tight')
+        ax_h_0.plot([sim_info['h_0'], sim_info['h_0']], \
+                    ax_h_0.get_ylim(), 'k--')
+    rfit_h_0_pdf = np.exp(-0.5 * ((h_0_grid - rfit_h_0) / \
+                                  rfit_sig_h_0) ** 2) / \
+                   np.sqrt(2.0 * np.pi) / rfit_sig_h_0
+    rfit_log_h_0_pdf = np.exp(-0.5 * ((np.log10(h_0_grid) - rfit_log_h_0) / \
+                                      rfit_sig_log_h_0) ** 2) / \
+                   np.sqrt(2.0 * np.pi) / rfit_sig_log_h_0 / h_0_grid / \
+                   np.log(10.0)
+    ax_h_0.plot(h_0_grid, rfit_h_0_pdf, 'r--')
+    ax_h_0.plot(h_0_grid, rfit_log_h_0_pdf, 'g--')
+    ax_h_0.set_xlabel(r'$H_0$')
+    ax_h_0.set_ylabel(r'$P(H_0)$')
+    if model_outliers == "gmm":
+        intcpt_grid = np.linspace(-5.0, 0.0, 1000)
+        sig_grid = np.logspace(-1.5, 0.5, 1000)
+        kde_i0 = sps.gaussian_kde(samples['intcpt_mm_c'][:, 0])
+        kde_i1 = sps.gaussian_kde(samples['intcpt_mm_c'][:, 1])
+        kde_s0 = sps.gaussian_kde(samples['sig_mm_c'][:, 0])
+        kde_s1 = sps.gaussian_kde(samples['sig_mm_c'][:, 1])
+        ax_intcpt.plot(intcpt_grid, kde_i0.evaluate(intcpt_grid), 'r')
+        ax_intcpt.plot(intcpt_grid, kde_i1.evaluate(intcpt_grid), 'g')
+        ax_sig.semilogx(sig_grid, kde_s0.evaluate(sig_grid), 'r')
+        ax_sig.semilogx(sig_grid, kde_s1.evaluate(sig_grid), 'g')
+        if sim:
+            ax_intcpt.plot([sim_info['abs_mag_c_std'], \
+                            sim_info['abs_mag_c_std']], \
+                           ax_intcpt.get_ylim(), 'k--')
+            ax_sig.plot([sim_info['sig_int_c'], sim_info['sig_int_c']], \
+                        ax_sig.get_ylim(), 'k--')
+            ax_sig.plot([sim_info['sig_out_c'], sim_info['sig_out_c']], \
+                        ax_sig.get_ylim(), 'k--')
+            ax_intcpt.plot([sim_info['abs_mag_c_std'] + sim_info['dmag_out_c'], \
+                            sim_info['abs_mag_c_std'] + sim_info['dmag_out_c']], \
+                           ax_intcpt.get_ylim(), 'k:')
+        ax_intcpt.set_xlabel(r'$M^{1\odot}$')
+        ax_intcpt.set_ylabel(r'$P(M^{1\odot})$')
+        ax_sig.set_xlabel(r'$\sigma_{i/o}$')
+        ax_sig.set_ylabel(r'$P(\sigma_{i/o})$')
+    elif model_outliers == "ht":
+        intcpt_grid = np.linspace(-5.0, 0.0, 1000)
+        sig_grid = np.logspace(-1.5, 0.5, 1000)
+        kde_i0 = sps.gaussian_kde(samples['abs_mag_c_std'])
+        kde_s0 = sps.gaussian_kde(samples['sig_int_c'])
+        ax_intcpt.plot(intcpt_grid, kde_i0.evaluate(intcpt_grid), 'r')
+        ax_sig.semilogx(sig_grid, kde_s0.evaluate(sig_grid), 'r')
+        if sim:
+            ax_intcpt.plot([sim_info['abs_mag_c_std'], sim_info['abs_mag_c_std']], \
+                           ax_intcpt.get_ylim(), 'k--')
+            ax_sig.plot([sim_info['sig_int_c'], sim_info['sig_int_c']], \
+                        ax_sig.get_ylim(), 'k--')
+        ax_intcpt.set_xlabel(r'$M^{1\odot}$')
+        ax_intcpt.set_ylabel(r'$P(M^{1\odot})$')
+        ax_sig.set_xlabel(r'$\sigma_{i/o}$')
+        ax_sig.set_ylabel(r'$P(\sigma_{i/o})$')
+    mp.savefig(base + '_constraints.pdf', bbox_inches = 'tight')

@@ -56,18 +56,37 @@ def riess_sn_delete(i_del, target):
     return target
 
 def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
-              model_outliers=None, verbose=False):
+              model_outliers=None, max_col_c=None, verbose=False):
 
     # define hosts based on analysis
-    if dataset == "r16_one_anc":
+    if dataset == "r16_one_anc" or dataset == "r19_one_anc" or \
+       dataset == "rd19_one_anc":
+        d_anchors = ["N4258"]#["LMC"]#["N4258"]
+        p_anchors = []
+        ceph_only_hosts = ["M31"]#[]
+        ceph_sn_hosts = ["N3021", "N3370", "N1309", "N3982", "N4639", \
+                         "N5584", "N4038", "N4536", "N1015", "N1365", \
+                         "N1448", "N3447", "N7250", "N5917", "N4424", \
+                         "U9391", "N3972", "N2442", "M101"]
+    elif dataset == "r16_one_anc_lmc_cal" or \
+         dataset == "r19_one_anc_lmc_cal" or \
+         dataset == "rd19_one_anc_lmc_cal":
         d_anchors = ["N4258"]
+        p_anchors = []
+        ceph_only_hosts = ["LMC", "M31"]
+        ceph_sn_hosts = ["N3021", "N3370", "N1309", "N3982", "N4639", \
+                         "N5584", "N4038", "N4536", "N1015", "N1365", \
+                         "N1448", "N3447", "N7250", "N5917", "N4424", \
+                         "U9391", "N3972", "N2442", "M101"]
+    elif dataset == "r16_two_anc":
+        d_anchors = ["N4258", "LMC"]
         p_anchors = []
         ceph_only_hosts = ["M31"]
         ceph_sn_hosts = ["N3021", "N3370", "N1309", "N3982", "N4639", \
                          "N5584", "N4038", "N4536", "N1015", "N1365", \
                          "N1448", "N3447", "N7250", "N5917", "N4424", \
                          "U9391", "N3972", "N2442", "M101"]
-    elif dataset == "r16":
+    elif dataset == "r16" or dataset == "r19" or dataset == "rd19":
         d_anchors = ["N4258", "LMC"]
         p_anchors = ["lCar", "etaGem", "betaDor", "WSgr", "XSgr", \
                      "YSgr", "delCeph", "FFAql", "TVul", "RTAur", \
@@ -87,6 +106,14 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                            "N1365", "N3447", "N7250"]
         ceph_sn_hosts = ["N1448", "N1309", "U9391", "N5917", \
                          "N5584", "N3972", "M101", "N4424", "N2442"]
+    elif dataset == "e17":
+        d_anchors = ["N4258"]#, "LMC"]???
+        p_anchors = []
+        ceph_only_hosts = ["M31"]
+        ceph_sn_hosts = ["N3021", "N3370", "N1309", "N3982", "N4639", \
+                         "N5584", "N4038", "N4536", "N1015", "N1365", \
+                         "N1448", "N3447", "N7250", "N5917", "N4424", \
+                         "U9391", "N3972", "N2442", "M101"]
     else:
         exit("ERROR: unknown dataset!")
     ceph_hosts = d_anchors + p_anchors + ceph_only_hosts + ceph_sn_hosts
@@ -96,10 +123,29 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
     # * D(LMC) = 49.97 +/- 0.19 (stat.) +/- 1.11 (sys.) kpc
     #   (http://www.nature.com/nature/journal/v495/n7439/full/nature11878.html)
     # all anchor distances are in Mpc
-    dis_anc = np.array([7.54e6, 49.97e3]) / 1.0e6
-    sig_dis_anc = np.array([np.sqrt(0.17e6 ** 2 + 0.10e6 ** 2), \
-                            np.sqrt(0.19e3 ** 2 + 1.11e3 ** 2)]) / \
-                  1.0e6
+    # OR
+    # * Reid+ 2019 Table 1 NGC4258: 7.58 ± 0.11 Mpc
+    # * Pietrzynski+ 2019 LMC: 49.59 ± 0.09 (stat) ± 0.54 (sys) kpc
+    # latter only used in r19; both in rd19
+    if 'r19' in dataset:
+        dis_anc = np.array([7.54e6, 49.59e3]) / 1.0e6
+        sig_dis_anc = np.array([np.sqrt(0.17e6 ** 2 + 0.10e6 ** 2), \
+                                np.sqrt(0.09e3 ** 2 + 0.54e3 ** 2)]) / \
+                      1.0e6
+    elif 'rd19' in dataset:
+        #dis_anc = np.array([7.58e6, 49.59e3]) / 1.0e6
+        #sig_dis_anc = np.array([np.sqrt(0.08e6 ** 2 + 0.08e6 ** 2), \
+        #                        np.sqrt(0.09e3 ** 2 + 0.54e3 ** 2)]) / \
+        #              1.0e6
+        dis_anc = np.array([7.576e6, 49.59e3]) / 1.0e6
+        sig_dis_anc = np.array([np.sqrt(0.082e6 ** 2 + 0.076e6 ** 2), \
+                                np.sqrt(0.09e3 ** 2 + 0.54e3 ** 2)]) / \
+                      1.0e6
+    else:
+        dis_anc = np.array([7.54e6, 49.97e3]) / 1.0e6
+        sig_dis_anc = np.array([np.sqrt(0.17e6 ** 2 + 0.10e6 ** 2), \
+                                np.sqrt(0.19e3 ** 2 + 1.11e3 ** 2)]) / \
+                      1.0e6
 
     # set anchor parallaxes
     # * http://mnras.oxfordjournals.org/content/379/2/723.full: 
@@ -118,6 +164,20 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                             -0.15, -0.01, -0.03, -0.09, -0.06, \
                             -0.13, -0.15, -0.18, -0.04, -0.04])
 
+    # read HST LMC Cepheid photometry if needed
+    pardir = os.path.dirname(os.path.abspath(__file__))
+    if dataset == 'r19' or dataset == 'rd19':
+        lmc_file = os.path.join(pardir, *['data', 'riess19_phot_LMC.txt'])
+        lmc_phot = np.genfromtxt(lmc_file, dtype=None, skip_header=30)
+        n_c_lmc = lmc_phot.shape[0]
+        lmc_c_data = np.zeros((5, n_c_lmc))
+        lmc_c_data[0, :] = lmc_phot['f11'] # Wes mags
+        lmc_c_data[1, :] = lmc_phot['f12'] # Wes mag errs
+        lmc_c_data[2, :] = lmc_phot['f4']  # log periods
+        lmc_c_data[3, :] = 8.60            # metallicities
+        lmc_c_data[4, :] = lmc_phot['f5'] - \
+                           lmc_phot['f7']  # colors
+
     # dimension Cepheid / SN host arrays
     n_ch = len(ceph_hosts)
     n_ch_d = len(d_anchors)
@@ -129,7 +189,14 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
     sig_app_mag_s_ch = np.zeros(n_ch_s)
     zp_off_mask = np.zeros(n_ch)
     if dataset == "r16" or dataset == "d17":
+        # LMC and MW Cepheids have offset
         zp_off_mask[1: n_ch_p + 2] = 1.0
+    elif dataset == "r16_one_anc_lmc_cal" or dataset == "r16_two_anc":
+        # LMC Cepheids have offset
+        zp_off_mask[1] = 1.0
+    elif dataset == "r19" or dataset == "rd19":
+        # MW Cepheids have offset
+        zp_off_mask[2: n_ch_p + 2] = 1.0
 
     # compile geometric measurements
     if n_ch_p == 0:
@@ -151,7 +218,6 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
     est_q_0 = -0.5575 # Betoule et al. 2014
     sig_q_0 =  0.0510 # Betoule et al. 2014
     sig_zp_off = 0.03
-    pardir = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(pardir, 'data/R16_table4.out')) as f:
         
         # dimension and fill Cepheid/SN host arrays
@@ -183,7 +249,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                                                   sig_int_s_r16 ** 2)
                             break
         s = 'RMS Ceph-host SN app mag err: {:7.5f}'
-        print s.format(np.sqrt(np.mean(sig_app_mag_s_ch ** 2)))
+        print(s.format(np.sqrt(np.mean(sig_app_mag_s_ch ** 2))))
         
         # pass through file to find Cepheid counts
         n_skip = 70
@@ -201,8 +267,13 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                 else:
                     for j in range(0, n_ch):
                         if vals[0].lower() == ceph_hosts[j].lower():
-                            n_c_ch[j] += 1
-                            break
+                            if max_col_c is None or \
+                               (max_col_c is not None and \
+                                float(vals[5]) < max_col_c):
+                                n_c_ch[j] += 1
+                                break
+        if dataset == 'r19' or dataset == 'rd19':
+            n_c_ch[1] = n_c_lmc
         n_c_ch = np.array(n_c_ch, dtype = int)
         n_c_tot = np.sum(n_c_ch)
 
@@ -211,6 +282,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
         sig_app_mag_c = np.zeros((n_ch, np.max(n_c_ch)))
         est_p_c = np.zeros((n_ch, np.max(n_c_ch)))
         est_z_c = np.zeros((n_ch, np.max(n_c_ch)))
+        est_col_c = np.zeros((n_ch, np.max(n_c_ch)))
         f.seek(0)
         k = np.zeros(n_ch, dtype = int)
         for i, l in enumerate(f):
@@ -218,6 +290,9 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                 vals = [val for val in l.split()]
                 if len(vals) == 0:
                     break
+                elif vals[0] == 'LMC' and (dataset == 'r19' or \
+                                           dataset == 'rd19'):
+                    continue
                 if vals[0] == "Galaxy":
                     for j in range(n_ch_d, n_ch_d + n_ch_p):
                         if vals[3] == ceph_hosts[j]:
@@ -227,28 +302,39 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                                                      sig_int_c_r16 ** 2)
                             est_p_c[j, k[j]] = float(vals[4])
                             est_z_c[j, k[j]] = float(vals[8])
+                            est_col_c[j, k[j]] = float(vals[5])
                             k[j] += 1
                             break
                 else:
                     for j in range(0, n_ch):
                         if vals[0].lower() == ceph_hosts[j].lower():
-                            est_app_mag_c[j, k[j]] = float(vals[6]) - \
-                                                     r_wesenheit * float(vals[5])
-                            sig_app_mag_c[j, k[j]] = np.sqrt(float(vals[7]) ** 2 - \
-                                                     sig_int_c_r16 ** 2)
-                            est_p_c[j, k[j]] = float(vals[4])
-                            est_z_c[j, k[j]] = float(vals[8])
-                            k[j] += 1
-                            break
-    print "= Cepheid / SN hosts ="
-    print 'total of {:d} Cepheids selected'.format(n_c_tot)
+                            if max_col_c is None or \
+                               (max_col_c is not None and \
+                                float(vals[5]) < max_col_c):
+                                est_app_mag_c[j, k[j]] = float(vals[6]) - \
+                                                         r_wesenheit * float(vals[5])
+                                sig_app_mag_c[j, k[j]] = np.sqrt(float(vals[7]) ** 2 - \
+                                                         sig_int_c_r16 ** 2)
+                                est_p_c[j, k[j]] = float(vals[4])
+                                est_z_c[j, k[j]] = float(vals[8])
+                                est_col_c[j, k[j]] = float(vals[5])
+                                k[j] += 1
+                                break
+    if dataset == 'r19' or dataset == 'rd19':
+        est_app_mag_c[1, 0: n_c_ch[1]] = lmc_c_data[0, :]
+        sig_app_mag_c[1, 0: n_c_ch[1]] = lmc_c_data[1, :]
+        est_p_c[1, 0: n_c_ch[1]] = 10.0 ** lmc_c_data[2, :]
+        est_z_c[1, 0: n_c_ch[1]] = lmc_c_data[3, :]
+        est_col_c[1, 0: n_c_ch[1]] = lmc_c_data[4, :]
+    print("= Cepheid / SN hosts =")
+    print('total of {:d} Cepheids selected'.format(n_c_tot))
     if verbose:
         mean_sig_app_mag_c = 0.0
         if n_ch_p > 0:
             mean_sig_app_mag_c_p = \
                 np.mean(np.sqrt(sig_app_mag_c[n_ch_d: n_ch_d + n_ch_p, 0] ** 2 + \
                                 sig_int_c_r16 ** 2))
-            print 'mean MW Cepheid app mag err: {:4.2f}'.format(mean_sig_app_mag_c_p)
+            print('mean MW Cepheid app mag err: {:4.2f}'.format(mean_sig_app_mag_c_p))
         for i in range(0, n_ch):
             mean_sig_app_mag_c += np.sum(sig_app_mag_c[i, 0: n_c_ch[i]] ** 2)
             mean_sig_app_mag_c_ch = \
@@ -256,28 +342,28 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                                 sig_int_c_r16 ** 2))
             mean_est_p_c_ch = np.mean(est_p_c[i, 0: n_c_ch[i]])
             if i < n_ch_d:
-                print "{:10s} {:3d} {:4.2f} {:4.2f}".format(ceph_hosts[i], \
-                    n_c_ch[i], mean_sig_app_mag_c_ch, mean_est_p_c_ch)
+                print("{:10s} {:3d} {:4.2f} {:4.2f}".format(ceph_hosts[i], \
+                    n_c_ch[i], mean_sig_app_mag_c_ch, mean_est_p_c_ch))
             elif i < n_ch_d + n_ch_p:
-                print "{:10s} {:3d}".format(ceph_hosts[i], n_c_ch[i])
+                print("{:10s} {:3d}".format(ceph_hosts[i], n_c_ch[i]))
             elif i < n_ch_d + n_ch_p + n_ch_c:
-                print "{:10s} {:3d} {:4.2f} {:4.2f}".format(ceph_hosts[i], \
-                    n_c_ch[i], mean_sig_app_mag_c_ch, mean_est_p_c_ch)
+                print("{:10s} {:3d} {:4.2f} {:4.2f}".format(ceph_hosts[i], \
+                    n_c_ch[i], mean_sig_app_mag_c_ch, mean_est_p_c_ch))
             else:
-                print "{:10s} {:3d} {:4.2f} {:4.2f} {:6.3f} {:5.3f}".format(ceph_hosts[i], \
+                print("{:10s} {:3d} {:4.2f} {:4.2f} {:6.3f} {:5.3f}".format(ceph_hosts[i], \
                     n_c_ch[i], mean_sig_app_mag_c_ch, mean_est_p_c_ch, \
                     est_app_mag_s_ch[i - (n_ch_d + n_ch_p + n_ch_c)], \
                     np.sqrt(sig_app_mag_s_ch[i - (n_ch_d + n_ch_p + n_ch_c)] ** 2 + \
-                                sig_int_s_r16 ** 2))
+                                sig_int_s_r16 ** 2)))
         mean_sig_app_mag_c = np.sqrt(mean_sig_app_mag_c / n_c_tot)
-        print 'RMS Cepheid app mag err: {:5.3f}'.format(mean_sig_app_mag_c)
+        print('RMS Cepheid app mag err: {:5.3f}'.format(mean_sig_app_mag_c))
         rms_sig_app_mag_tot = np.sqrt(np.mean(sig_app_mag_s_ch ** 2 + sig_int_s_r16 ** 2))
-        print 'RMS Cepheid-host SN app mag err: {:7.5f}'.format(np.sqrt(np.mean(sig_app_mag_s_ch ** 2)))
-        print 'RMS Cepheid-host SN total app mag err: {:7.5f}'.format(rms_sig_app_mag_tot)
-        
+        print('RMS Cepheid-host SN app mag err: {:7.5f}'.format(np.sqrt(np.mean(sig_app_mag_s_ch ** 2))))
+        print('RMS Cepheid-host SN total app mag err: {:7.5f}'.format(rms_sig_app_mag_tot))
+
     # read in Hubble Flow SN data
-    print "= = = = = = = = = ="
-    print "= Hubble Flow SNe ="
+    print("= = = = = = = = = =")
+    print("= Hubble Flow SNe =")
     if dataset == "d17":
 
         # only need mags and redshifts for NIR SNe. datafile has all 
@@ -305,7 +391,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                     # check SN is not fast-decliner
                     if sn in fast_dec:
                         if verbose:
-                            print "fast-decliner!", sn
+                            print("fast-decliner!", sn)
                         continue
                     sne_sel.append(sn)
                     n_s += 1
@@ -406,7 +492,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                     sne.append(sn)
                     if sn in sne[:-1] or sn in dupe_sdss:
                         if verbose:
-                            print "dupe!", sn
+                            print("dupe!", sn)
                         sne_dupes.append(sn)
                         continue
 
@@ -437,7 +523,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                                 x_0_err_temp
                     if np.abs(c_x_0_rho) > 0.95:
                         s = '* SN {:s} corr coeff extreme: {:6.3f}'
-                        print s.format(sn, c_x_0_rho)
+                        print(s.format(sn, c_x_0_rho))
                     cov = np.zeros((3, 3))
                     cov[0, 0] = x_0_err_temp ** 2
                     cov[1, 1] = x_1_err_temp ** 2
@@ -452,10 +538,10 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                         l_cov = np.linalg.cholesky(cov)
                     except np.linalg.LinAlgError:
                         s = '* SN {:s} x_0/x_1/c cov not pos def:'
-                        print s.format(sn)
-                        print cov
-                        print 'has eigenvalues: ', np.linalg.eigvals(cov)
-                        print '=> rejected'
+                        print(s.format(sn))
+                        print(cov)
+                        print('has eigenvalues: ', np.linalg.eigvals(cov))
+                        print('=> rejected')
                         continue
 
                     # R16 data quality cuts
@@ -480,22 +566,22 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                         n_s += 1
                     elif model_outliers is None:
                         s = '* SN {:s} fails cuts unexpectedly!'
-                        print s.format(sn)
+                        print(s.format(sn))
                         if (z_temp < z_s_min or z_temp > z_s_max):
-                            print 'bad redshift: {:7.5f}'.format(z_temp)
+                            print('bad redshift: {:7.5f}'.format(z_temp))
                         if (np.abs(c_temp) >= 0.3):
-                            print 'bad colour: {:7.4f}'.format(c_temp)
+                            print('bad colour: {:7.4f}'.format(c_temp))
                         if (np.abs(x_1_temp) >= 3.0):
-                            print 'bad stretch: {:7.4f}'.format(x_1_temp)
+                            print('bad stretch: {:7.4f}'.format(x_1_temp))
                         if (x_1_err_temp >= 1.5):
-                            print 'bad stretch err: {:7.4f}'.format(x_1_err_temp)
+                            print('bad stretch err: {:7.4f}'.format(x_1_err_temp))
                         if (prob_temp <= 0.001):
-                            print 'bad prob: {:7.4f}'.format(prob_temp)
+                            print('bad prob: {:7.4f}'.format(prob_temp))
                         if (peak_time_temp >= 2.0):
-                            print 'bad peak time: {:7.4f}'.format(peak_time_temp)
+                            print('bad peak time: {:7.4f}'.format(peak_time_temp))
                         if (m_err_temp >= 0.2):
-                            print 'bad mag err: {:7.4f}'.format(m_err_temp)
-                        print '=> rejected'
+                            print('bad mag err: {:7.4f}'.format(m_err_temp))
+                        print('=> rejected')
     
     # convert lists to arrays
     est_z_s = np.array(est_z_s)
@@ -520,22 +606,22 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
         est_x_0_s = np.array(est_x_0_s)
         sig_x_0_s = np.array(sig_x_0_s)
         cov_x_1_c_s = np.array(cov_x_1_c_s)
-        print "duplicate SNe: ", sne_dupes
+        print("duplicate SNe: ", sne_dupes)
     s = '{} SNe after cuts'
-    print s.format(n_s)
+    print(s.format(n_s))
     s = 'RMS SN app mag err: {:7.5f}'
-    print s.format(np.sqrt(np.mean(sig_app_mag_s ** 2)))
+    print(s.format(np.sqrt(np.mean(sig_app_mag_s ** 2))))
     rms_sig_app_mag_tot = np.sqrt(np.mean(sig_app_mag_s ** 2 + \
                                           sig_int_s_r16 ** 2))
     s = 'RMS SN total app mag err: {:7.5f}'
-    print s.format(rms_sig_app_mag_tot)
+    print(s.format(rms_sig_app_mag_tot))
     s = 'RMS SN z err: {:7.5f}'
-    print s.format(np.sqrt(np.mean(sig_z_s ** 2)))
+    print(s.format(np.sqrt(np.mean(sig_z_s ** 2))))
     if dataset != "d17":
         s = 'mean / sigma of SN shape: {:7.5f}+/-{:7.5f}'
-        print s.format(np.mean(est_x_1_s), np.std(est_x_1_s))
+        print(s.format(np.mean(est_x_1_s), np.std(est_x_1_s)))
         s = 'mean / sigma of SN colour: {:7.5f}+/-{:7.5f}'
-        print s.format(np.mean(est_c_s), np.std(est_c_s))
+        print(s.format(np.mean(est_c_s), np.std(est_c_s)))
 
         # convert salt-2 covariance from (x0, x1, c) to (m_B, x1, c)
         sf = -2.5 / (est_x_0_s * np.log(10.0))
@@ -548,21 +634,21 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
             ' [{:7.5f}, {:7.5f}, {:7.5f}],\n' + \
             '                                  ' + \
             ' [{:7.5f}, {:7.5f}, {:7.5f}]]'
-        print s.format(np.mean(sig_app_mag_s ** 2), \
+        print(s.format(np.mean(sig_app_mag_s ** 2), \
                        np.mean(cov_x_1_app_mag_s), \
                        np.mean(cov_c_app_mag_s), \
                        np.mean(cov_x_1_app_mag_s), \
                        np.mean(sig_x_1_s ** 2), np.mean(cov_x_1_c_s), \
                        np.mean(cov_c_app_mag_s), np.mean(cov_x_1_c_s), \
-                       np.mean(sig_c_s ** 2))
+                       np.mean(sig_c_s ** 2)))
         s = '"average" mag-stretch correlation: {:7.5f}'
-        print s.format(np.mean(cov_x_1_app_mag_s / sig_x_1_s / \
-                               sig_app_mag_s))
+        print(s.format(np.mean(cov_x_1_app_mag_s / sig_x_1_s / \
+                               sig_app_mag_s)))
         s = '"average" mag-colour correlation: {:7.5f}'
-        print s.format(np.mean(cov_c_app_mag_s / sig_c_s / \
-                               sig_app_mag_s))
+        print(s.format(np.mean(cov_c_app_mag_s / sig_c_s / \
+                               sig_app_mag_s)))
         s = '"average" stretch-colour correlation: {:7.5f}'
-        print s.format(np.mean(cov_x_1_c_s / sig_x_1_s / sig_c_s))
+        print(s.format(np.mean(cov_x_1_c_s / sig_x_1_s / sig_c_s)))
     
     # return parsed data
     to_return = [n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, n_s, \
