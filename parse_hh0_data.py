@@ -114,6 +114,22 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                          "N5584", "N4038", "N4536", "N1015", "N1365", \
                          "N1448", "N3447", "N7250", "N5917", "N4424", \
                          "U9391", "N3972", "N2442", "M101"]
+    elif dataset == "r19_one_anc_lmc"  or dataset == "rd19_one_anc_lmc":
+        d_anchors = ["LMC"]
+        p_anchors = []
+        ceph_only_hosts = []
+        ceph_sn_hosts = ["N3021", "N3370", "N1309", "N3982", "N4639", \
+                         "N5584", "N4038", "N4536", "N1015", "N1365", \
+                         "N1448", "N3447", "N7250", "N5917", "N4424", \
+                         "U9391", "N3972", "N2442", "M101"]
+    elif dataset == "r19_two_anc"  or dataset == "rd19_two_anc":
+        d_anchors = ["N4258", "LMC"]
+        p_anchors = []
+        ceph_only_hosts = []
+        ceph_sn_hosts = ["N3021", "N3370", "N1309", "N3982", "N4639", \
+                         "N5584", "N4038", "N4536", "N1015", "N1365", \
+                         "N1448", "N3447", "N7250", "N5917", "N4424", \
+                         "U9391", "N3972", "N2442", "M101"]
     else:
         exit("ERROR: unknown dataset!")
     ceph_hosts = d_anchors + p_anchors + ceph_only_hosts + ceph_sn_hosts
@@ -124,9 +140,12 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
     #   (http://www.nature.com/nature/journal/v495/n7439/full/nature11878.html)
     # all anchor distances are in Mpc
     # OR
-    # * Reid+ 2019 Table 1 NGC4258: 7.58 ± 0.11 Mpc
-    # * Pietrzynski+ 2019 LMC: 49.59 ± 0.09 (stat) ± 0.54 (sys) kpc
+    # * Reid+ 2019 Table 1 NGC4258: 7.58 +/- 0.11 Mpc
+    # * Pietrzynski+ 2019 LMC: 49.59 +/- 0.09 (stat) +/- 0.54 (sys) kpc
     # latter only used in r19; both in rd19
+    # 
+    # @TODO: R19 also adds in CRNL and geometric systematic errors that 
+    # are not included here
     if 'r19' in dataset:
         dis_anc = np.array([7.54e6, 49.59e3]) / 1.0e6
         sig_dis_anc = np.array([np.sqrt(0.17e6 ** 2 + 0.10e6 ** 2), \
@@ -166,7 +185,16 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
 
     # read HST LMC Cepheid photometry if needed
     pardir = os.path.dirname(os.path.abspath(__file__))
-    if dataset == 'r19' or dataset == 'rd19':
+    if dataset == 'r19' or dataset == 'rd19' or \
+       dataset == 'r19_one_anc_lmc_cal' or \
+       dataset == 'rd19_one_anc_lmc_cal' or \
+       dataset == 'r19_one_anc_lmc' or \
+       dataset == 'rd19_one_anc_lmc' or \
+       dataset == 'r19_two_anc' or \
+       dataset == 'rd19_two_anc':
+
+        use_new_lmc_ceph = True
+        ind_lmc = ceph_hosts.index('LMC')
         lmc_file = os.path.join(pardir, *['data', 'riess19_phot_LMC.txt'])
         lmc_phot = np.genfromtxt(lmc_file, dtype=None, skip_header=30)
         n_c_lmc = lmc_phot.shape[0]
@@ -177,6 +205,10 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
         lmc_c_data[3, :] = 8.60            # metallicities
         lmc_c_data[4, :] = lmc_phot['f5'] - \
                            lmc_phot['f7']  # colors
+
+    else:
+
+        use_new_lmc_ceph = False
 
     # dimension Cepheid / SN host arrays
     n_ch = len(ceph_hosts)
@@ -200,8 +232,13 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
 
     # compile geometric measurements
     if n_ch_p == 0:
-        dis_anc = dis_anc[0: n_ch_d]
-        sig_dis_anc = sig_dis_anc[0: n_ch_d]
+        if dataset == 'r19_one_anc_lmc' or \
+           dataset == 'rd19_one_anc_lmc':
+            dis_anc = dis_anc[1: 2]
+            sig_dis_anc = sig_dis_anc[1: 2]
+        else:
+            dis_anc = dis_anc[0: n_ch_d]
+            sig_dis_anc = sig_dis_anc[0: n_ch_d]
         par_anc_lkc = []
     else:
         dis_anc = np.concatenate([dis_anc[0: n_ch_d], \
@@ -212,7 +249,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
 
     # read in Cepheid / SN host data
     r_wesenheit = 0.39
-    sig_int_c_r16 = 0.065# 0.08
+    sig_int_c_r16 = 0.065# 0.08 # @TODO: can i remember why this changed?
     sig_int_s_r16 = 0.1
     sig_v_pec = 250.0
     est_q_0 = -0.5575 # Betoule et al. 2014
@@ -272,8 +309,8 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                                 float(vals[5]) < max_col_c):
                                 n_c_ch[j] += 1
                                 break
-        if dataset == 'r19' or dataset == 'rd19':
-            n_c_ch[1] = n_c_lmc
+        if use_new_lmc_ceph:
+            n_c_ch[ind_lmc] = n_c_lmc
         n_c_ch = np.array(n_c_ch, dtype = int)
         n_c_tot = np.sum(n_c_ch)
 
@@ -290,8 +327,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                 vals = [val for val in l.split()]
                 if len(vals) == 0:
                     break
-                elif vals[0] == 'LMC' and (dataset == 'r19' or \
-                                           dataset == 'rd19'):
+                elif vals[0] == 'LMC' and use_new_lmc_ceph:
                     continue
                 if vals[0] == "Galaxy":
                     for j in range(n_ch_d, n_ch_d + n_ch_p):
@@ -320,12 +356,12 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                                 est_col_c[j, k[j]] = float(vals[5])
                                 k[j] += 1
                                 break
-    if dataset == 'r19' or dataset == 'rd19':
-        est_app_mag_c[1, 0: n_c_ch[1]] = lmc_c_data[0, :]
-        sig_app_mag_c[1, 0: n_c_ch[1]] = lmc_c_data[1, :]
-        est_p_c[1, 0: n_c_ch[1]] = 10.0 ** lmc_c_data[2, :]
-        est_z_c[1, 0: n_c_ch[1]] = lmc_c_data[3, :]
-        est_col_c[1, 0: n_c_ch[1]] = lmc_c_data[4, :]
+    if use_new_lmc_ceph:
+        est_app_mag_c[ind_lmc, 0: n_c_lmc] = lmc_c_data[0, :]
+        sig_app_mag_c[ind_lmc, 0: n_c_lmc] = lmc_c_data[1, :]
+        est_p_c[ind_lmc, 0: n_c_lmc] = 10.0 ** lmc_c_data[2, :]
+        est_z_c[ind_lmc, 0: n_c_lmc] = lmc_c_data[3, :]
+        est_col_c[ind_lmc, 0: n_c_lmc] = lmc_c_data[4, :]
     print("= Cepheid / SN hosts =")
     print('total of {:d} Cepheids selected'.format(n_c_tot))
     if verbose:
