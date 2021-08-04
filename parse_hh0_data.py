@@ -122,7 +122,9 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                          "N5584", "N4038", "N4536", "N1015", "N1365", \
                          "N1448", "N3447", "N7250", "N5917", "N4424", \
                          "U9391", "N3972", "N2442", "M101"]
-    elif dataset == "r19_two_anc"  or dataset == "rd19_two_anc":
+    elif dataset == "r19_two_anc"  or dataset == "rd19_two_anc" or \
+         dataset == "r19_two_anc_lmc_combo" or \
+         dataset == "rd19_two_anc_lmc_combo":
         d_anchors = ["N4258", "LMC"]
         p_anchors = []
         ceph_only_hosts = []
@@ -183,52 +185,15 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                             -0.15, -0.01, -0.03, -0.09, -0.06, \
                             -0.13, -0.15, -0.18, -0.04, -0.04])
 
-    # read HST LMC Cepheid photometry if needed
-    pardir = os.path.dirname(os.path.abspath(__file__))
-    if dataset == 'r19' or dataset == 'rd19' or \
-       dataset == 'r19_one_anc_lmc_cal' or \
-       dataset == 'rd19_one_anc_lmc_cal' or \
-       dataset == 'r19_one_anc_lmc' or \
-       dataset == 'rd19_one_anc_lmc' or \
-       dataset == 'r19_two_anc' or \
-       dataset == 'rd19_two_anc':
-
-        use_new_lmc_ceph = True
-        ind_lmc = ceph_hosts.index('LMC')
-        lmc_file = os.path.join(pardir, *['data', 'riess19_phot_LMC.txt'])
-        lmc_phot = np.genfromtxt(lmc_file, dtype=None, skip_header=30)
-        n_c_lmc = lmc_phot.shape[0]
-        lmc_c_data = np.zeros((5, n_c_lmc))
-        lmc_c_data[0, :] = lmc_phot['f11'] # Wes mags
-        lmc_c_data[1, :] = lmc_phot['f12'] # Wes mag errs
-        lmc_c_data[2, :] = lmc_phot['f4']  # log periods
-        lmc_c_data[3, :] = 8.60            # metallicities
-        lmc_c_data[4, :] = lmc_phot['f5'] - \
-                           lmc_phot['f7']  # colors
-
-    else:
-
-        use_new_lmc_ceph = False
-
     # dimension Cepheid / SN host arrays
     n_ch = len(ceph_hosts)
     n_ch_d = len(d_anchors)
     n_ch_p = len(p_anchors)
     n_ch_c = len(ceph_only_hosts)
     n_ch_s = len(ceph_sn_hosts)
-    n_c_ch = np.zeros(n_ch)
+    n_c_ch = np.zeros(n_ch, dtype=int)
     est_app_mag_s_ch = np.zeros(n_ch_s)
     sig_app_mag_s_ch = np.zeros(n_ch_s)
-    zp_off_mask = np.zeros(n_ch)
-    if dataset == "r16" or dataset == "d17":
-        # LMC and MW Cepheids have offset
-        zp_off_mask[1: n_ch_p + 2] = 1.0
-    elif dataset == "r16_one_anc_lmc_cal" or dataset == "r16_two_anc":
-        # LMC Cepheids have offset
-        zp_off_mask[1] = 1.0
-    elif dataset == "r19" or dataset == "rd19":
-        # MW Cepheids have offset
-        zp_off_mask[2: n_ch_p + 2] = 1.0
 
     # compile geometric measurements
     if n_ch_p == 0:
@@ -247,7 +212,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                                       sig_par_anc[0: n_ch_p]])
         par_anc_lkc = par_anc_lkc[0: n_ch_p]
 
-    # read in Cepheid / SN host data
+    # parameters, measurements and uncertainties
     r_wesenheit = 0.39
     sig_int_c_r16 = 0.065# 0.08 # @TODO: can i remember why this changed?
     sig_int_s_r16 = 0.1
@@ -255,113 +220,214 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
     est_q_0 = -0.5575 # Betoule et al. 2014
     sig_q_0 =  0.0510 # Betoule et al. 2014
     sig_zp_off = 0.03
-    with open(os.path.join(pardir, 'data/R16_table4.out')) as f:
-        
-        # dimension and fill Cepheid/SN host arrays
-        if dataset == "d17":
-            with open(os.path.join(pardir, \
-                      'data/nir_sne/calibrators.dat')) as f2:
-                n_skip = 1
-                for i, l in enumerate(f2):
-                    if (i > n_skip - 1):
-                        vals = [val for val in l.split()]
-                        if len(vals) == 0:
-                            break
-                        for j in range(0, n_ch_s):
-                            if vals[9].replace('GC', '') == ceph_sn_hosts[j]:
-                                est_app_mag_s_ch[j] = float(vals[1])
-                                sig_app_mag_s_ch[j] = float(vals[2])
-                                break
-        else:
-            n_skip = 40
-            for i, l in enumerate(f):
-                if (i > n_skip - 1):
-                    vals = [val for val in l.split()]
-                    if len(vals) == 0:
-                        break
-                    for j in range(0, n_ch_s):
-                        if vals[0] == ceph_sn_hosts[j]:
-                            est_app_mag_s_ch[j] = float(vals[2])
-                            sig_app_mag_s_ch[j] = np.sqrt(float(vals[3]) ** 2 - \
-                                                  sig_int_s_r16 ** 2)
-                            break
-        s = 'RMS Ceph-host SN app mag err: {:7.5f}'
-        print(s.format(np.sqrt(np.mean(sig_app_mag_s_ch ** 2))))
-        
-        # pass through file to find Cepheid counts
-        n_skip = 70
-        f.seek(0)
-        for i, l in enumerate(f):
-            if (i > n_skip - 1):
-                vals = [val for val in l.split()]
-                if len(vals) == 0:
-                    break
-                if vals[0] == "Galaxy":
-                    for j in range(n_ch_d, n_ch_d + n_ch_p):
-                        if vals[3] == ceph_hosts[j]:
-                            n_c_ch[j] += 1
-                            break
-                else:
-                    for j in range(0, n_ch):
-                        if vals[0].lower() == ceph_hosts[j].lower():
-                            if max_col_c is None or \
-                               (max_col_c is not None and \
-                                float(vals[5]) < max_col_c):
-                                n_c_ch[j] += 1
-                                break
-        if use_new_lmc_ceph:
-            n_c_ch[ind_lmc] = n_c_lmc
-        n_c_ch = np.array(n_c_ch, dtype = int)
-        n_c_tot = np.sum(n_c_ch)
 
-        # dimension and fill Cepheid arrays
-        est_app_mag_c = np.zeros((n_ch, np.max(n_c_ch)))
-        sig_app_mag_c = np.zeros((n_ch, np.max(n_c_ch)))
-        est_p_c = np.zeros((n_ch, np.max(n_c_ch)))
-        est_z_c = np.zeros((n_ch, np.max(n_c_ch)))
-        est_col_c = np.zeros((n_ch, np.max(n_c_ch)))
-        f.seek(0)
-        k = np.zeros(n_ch, dtype = int)
-        for i, l in enumerate(f):
-            if (i > n_skip - 1):
-                vals = [val for val in l.split()]
-                if len(vals) == 0:
-                    break
-                elif vals[0] == 'LMC' and use_new_lmc_ceph:
-                    continue
-                if vals[0] == "Galaxy":
-                    for j in range(n_ch_d, n_ch_d + n_ch_p):
-                        if vals[3] == ceph_hosts[j]:
-                            est_app_mag_c[j, k[j]] = float(vals[6]) - \
-                                                     r_wesenheit * float(vals[5])
-                            sig_app_mag_c[j, k[j]] = np.sqrt(float(vals[7]) ** 2 - \
-                                                     sig_int_c_r16 ** 2)
-                            est_p_c[j, k[j]] = float(vals[4])
-                            est_z_c[j, k[j]] = float(vals[8])
-                            est_col_c[j, k[j]] = float(vals[5])
-                            k[j] += 1
-                            break
-                else:
-                    for j in range(0, n_ch):
-                        if vals[0].lower() == ceph_hosts[j].lower():
-                            if max_col_c is None or \
-                               (max_col_c is not None and \
-                                float(vals[5]) < max_col_c):
-                                est_app_mag_c[j, k[j]] = float(vals[6]) - \
-                                                         r_wesenheit * float(vals[5])
-                                sig_app_mag_c[j, k[j]] = np.sqrt(float(vals[7]) ** 2 - \
-                                                         sig_int_c_r16 ** 2)
-                                est_p_c[j, k[j]] = float(vals[4])
-                                est_z_c[j, k[j]] = float(vals[8])
-                                est_col_c[j, k[j]] = float(vals[5])
-                                k[j] += 1
-                                break
-    if use_new_lmc_ceph:
-        est_app_mag_c[ind_lmc, 0: n_c_lmc] = lmc_c_data[0, :]
-        sig_app_mag_c[ind_lmc, 0: n_c_lmc] = lmc_c_data[1, :]
-        est_p_c[ind_lmc, 0: n_c_lmc] = 10.0 ** lmc_c_data[2, :]
-        est_z_c[ind_lmc, 0: n_c_lmc] = lmc_c_data[3, :]
-        est_col_c[ind_lmc, 0: n_c_lmc] = lmc_c_data[4, :]
+    # read in raw SH0ES data
+    pardir = os.path.dirname(os.path.abspath(__file__))
+    r16_datafile = os.path.join(pardir, *['data', 'R16_table4.out'])
+    r16_s_cols = ['Host', 'SN', 'mB', 'err']
+    r16_c_cols = ['Field', 'RA', 'DEC', 'ID', 'Period', 'Color', \
+                       'MagH', 'sigma_tot', 'Z']
+    r16_s_data = np.genfromtxt(r16_datafile, dtype=None, skip_header=40, \
+                               max_rows=19, names=r16_s_cols, \
+                               encoding='utf-8')
+    r16_c_data = np.genfromtxt(r16_datafile, dtype=None, skip_header=70, \
+                               names=r16_c_cols, encoding='utf-8')
+
+    # fill SNe data
+    if dataset == 'd17':
+        datafile = os.path.join(pardir, *['data', 'nir', 'calibrators.dat'])
+        nir_s_data = np.genfromtxt(datafile, dtype=None, names=True, \
+                                   encoding='utf-8')
+        for j in range(0, n_ch_s):
+            i_host = np.where(np.char.replace(nir_s_data['Host'], 'GC', '') == ceph_sn_hosts[j])[0]
+            if len(i_host) > 0:
+                i_host = i_host[0]
+                est_app_mag_s_ch[j] = nir_s_data['mJ'][i_host]
+                sig_app_mag_s_ch[j] = nir_s_data['err'][i_host]
+    else:
+        for j in range(0, n_ch_s):
+            i_host = np.where(r16_s_data['Host'] == ceph_sn_hosts[j])[0]
+            if len(i_host) > 0:
+                i_host = i_host[0]
+                est_app_mag_s_ch[j] = r16_s_data['mB'][i_host]
+                sig_app_mag_s_ch[j] = np.sqrt(r16_s_data['err'][i_host] ** 2 - \
+                                              sig_int_s_r16 ** 2)
+
+    # check colors and count Cepheids
+    if max_col_c is not None:
+        r16_c_data = r16_c_data[r16_c_data['Color'] < max_col_c]
+    id_field = np.full(n_ch, 'Field')
+    for j in range(0, n_ch):
+        in_host = np.char.upper(r16_c_data['Field']) == \
+                  ceph_hosts[j].upper()
+        n_c_ch[j] = np.sum(in_host)
+        if n_c_ch[j] == 0:
+            in_host = np.char.upper(r16_c_data['ID']) == \
+                      ceph_hosts[j].upper()
+            n_c_ch[j] = np.sum(in_host)
+            if n_c_ch[j] == 0:
+                exit('ERROR: unknown Cepheid host ' + ceph_hosts[j])
+            else:
+                id_field[j] = 'ID'
+
+    # do we need to read R19 HST LMC Cepheid photometry?
+    if dataset == 'r19' or dataset == 'rd19' or \
+       dataset == 'r19_one_anc_lmc_cal' or \
+       dataset == 'rd19_one_anc_lmc_cal' or \
+       dataset == 'r19_one_anc_lmc' or \
+       dataset == 'rd19_one_anc_lmc' or \
+       dataset == 'r19_two_anc' or \
+       dataset == 'rd19_two_anc' or \
+       'lmc_combo' in dataset:
+
+        use_new_lmc_ceph = True
+        ind_lmc = ceph_hosts.index('LMC')
+        lmc_file = os.path.join(pardir, *['data', 'riess19_phot_LMC.txt'])
+        lmc_phot = np.genfromtxt(lmc_file, dtype=None, skip_header=30, \
+                                 encoding='utf-8')
+        if max_col_c is not None:
+            lmc_phot = lmc_phot[lmc_phot['f5'] - lmc_phot['f7'] < max_col_c]
+        n_c_lmc_r19 = lmc_phot.shape[0]
+        r19_lmc_c_data = np.zeros((5, n_c_lmc_r19))
+        r19_lmc_c_data[0, :] = lmc_phot['f11']    # Wes mags
+        r19_lmc_c_data[1, :] = lmc_phot['f12']    # Wes mag errs
+        r19_lmc_c_data[2, :] = lmc_phot['f4']     # log periods
+        r19_lmc_c_data[3, :] = 8.60               # metallicities
+        r19_lmc_c_data[4, :] = lmc_phot['f5'] - \
+                               lmc_phot['f7']     # colors
+        r19_lmc_c_ids = lmc_phot['f0']            # IDs
+
+        # do we want to combine R16 and R19 LMC Cepheids?
+        if 'lmc_combo' in dataset:
+
+            # find indices into R16 array for Cepheids common to R16 and R19
+            r16_lmc_c_ids = r16_c_data['ID'][r16_c_data['Field'] == 'LMC']
+            n_c_lmc_r16 =len(r16_lmc_c_ids) 
+            i_r16 = np.full(n_c_lmc_r19, -1)
+            for i in range(n_c_lmc_r19):
+                i_match = np.where(r16_lmc_c_ids == \
+                                   r19_lmc_c_ids[i].replace('OGL', 'OGL-'))[0]
+                if len(i_match) > 0:
+                    i_r16[i] = i_match[0]
+
+            # count the number of new Cepheids and add any not already 
+            # in R16 sample to LMC count
+            n_c_lmc_r19_not_r16 = np.sum(i_r16 == -1)
+            n_c_lmc_r16_and_r19 = n_c_lmc_r19 - n_c_lmc_r19_not_r16
+            n_c_ch[ind_lmc] += n_c_lmc_r19_not_r16
+
+        else:
+
+            # if not, we will be replacing the R16 LMC sample with the 
+            # R19 sample, so adjust the LMC count accordingly
+            n_c_ch[ind_lmc] = n_c_lmc_r19
+
+    else:
+
+        use_new_lmc_ceph = False
+
+    # build up initial per-Cepheid zp_offset_mask. this is simple 
+    # (either 1 or 0 per-host) unless combining the HST (R19) and 
+    # ground-based (R16) LMC Cepheids; in this case, zp_off_mask 
+    # is modified in the fill Cepheid arrays block below
+    zp_off_mask = np.zeros((n_ch, np.max(n_c_ch)))
+    if dataset == "r16" or dataset == "d17":
+    
+        # LMC and MW Cepheids have offset
+        zp_off_mask[1, 0: n_c_ch[1]] = 1.0
+        zp_off_mask[2: n_ch_p + 2, 0] = 1.0
+    
+    elif dataset == "r16_one_anc_lmc_cal" or dataset == "r16_two_anc":
+        
+        # LMC Cepheids have offset
+        zp_off_mask[1, 0: n_c_ch[1]] = 1.0
+    
+    elif dataset == "r19" or dataset == "rd19":
+
+        # MW Cepheids have offset
+        zp_off_mask[2: n_ch_p + 2, 0] = 1.0
+
+    elif 'lmc_combo' in dataset:
+    
+        # R16 LMC Cepheids have offset. for now, set all LMC Cephs
+        # to have offset; R19 Cepheids will be turned off in the 
+        # block below
+        zp_off_mask[1, 0: n_c_ch[1]] = 1.0
+
+    # fill Cepheid arrays
+    n_c_tot = np.sum(n_c_ch)
+    est_app_mag_c = np.zeros((n_ch, np.max(n_c_ch)))
+    sig_app_mag_c = np.zeros((n_ch, np.max(n_c_ch)))
+    est_p_c = np.zeros((n_ch, np.max(n_c_ch)))
+    est_z_c = np.zeros((n_ch, np.max(n_c_ch)))
+    est_col_c = np.zeros((n_ch, np.max(n_c_ch)))
+    for j in range(0, n_ch):
+
+        # populating LMC Cepheid array is more complex than others
+        if use_new_lmc_ceph and ceph_hosts[j] == 'LMC':
+
+            # are we combining the R16 and R19 LMC Cepheid samples?
+            if 'lmc_combo' in dataset:
+
+                # fill LMC portion using R16 data
+                in_host = np.char.upper(r16_c_data[id_field[j]]) == \
+                          ceph_hosts[j].upper()
+                est_app_mag_c[j, 0: n_c_lmc_r16] = r16_c_data['MagH'][in_host] - \
+                                                   r_wesenheit * \
+                                                   r16_c_data['Color'][in_host]
+                sig_app_mag_c[j, 0: n_c_lmc_r16] = \
+                    np.sqrt(r16_c_data['sigma_tot'][in_host] ** 2 - \
+                            sig_int_c_r16 ** 2)
+                est_p_c[j, 0: n_c_lmc_r16] = r16_c_data['Period'][in_host]
+                est_z_c[j, 0: n_c_lmc_r16] = r16_c_data['Z'][in_host]
+                est_col_c[j, 0: n_c_lmc_r16] = r16_c_data['Color'][in_host]
+
+                # replace those Cepheids also measured with the HST, and 
+                # add the remaining few only measured with the HST
+                i_rem = n_c_lmc_r16
+                for k in range(n_c_lmc_r19):
+
+                    if i_r16[k] != -1:
+                        est_app_mag_c[ind_lmc, i_r16[k]] = r19_lmc_c_data[0, k]
+                        sig_app_mag_c[ind_lmc, i_r16[k]] = r19_lmc_c_data[1, k]
+                        est_p_c[ind_lmc, i_r16[k]] = 10.0 ** r19_lmc_c_data[2, k]
+                        est_z_c[ind_lmc, i_r16[k]] = r19_lmc_c_data[3, k]
+                        est_col_c[ind_lmc, i_r16[k]] = r19_lmc_c_data[4, k]
+                        zp_off_mask[ind_lmc, i_r16[k]] = 0.0
+                    else:
+                        est_app_mag_c[ind_lmc, i_rem] = r19_lmc_c_data[0, k]
+                        sig_app_mag_c[ind_lmc, i_rem] = r19_lmc_c_data[1, k]
+                        est_p_c[ind_lmc, i_rem] = 10.0 ** r19_lmc_c_data[2, k]
+                        est_z_c[ind_lmc, i_rem] = r19_lmc_c_data[3, k]
+                        est_col_c[ind_lmc, i_rem] = r19_lmc_c_data[4, k]
+                        zp_off_mask[ind_lmc, i_rem] = 0.0
+                        i_rem += 1
+
+            else:
+
+                # fill directly from R19 data
+                est_app_mag_c[ind_lmc, 0: n_c_lmc_r19] = r19_lmc_c_data[0, :]
+                sig_app_mag_c[ind_lmc, 0: n_c_lmc_r19] = r19_lmc_c_data[1, :]
+                est_p_c[ind_lmc, 0: n_c_lmc_r19] = 10.0 ** r19_lmc_c_data[2, :]
+                est_z_c[ind_lmc, 0: n_c_lmc_r19] = r19_lmc_c_data[3, :]
+                est_col_c[ind_lmc, 0: n_c_lmc_r19] = r19_lmc_c_data[4, :]
+
+        else:
+
+            # fill arrays using R16 data
+            in_host = np.char.upper(r16_c_data[id_field[j]]) == \
+                      ceph_hosts[j].upper()
+            est_app_mag_c[j, 0: n_c_ch[j]] = r16_c_data['MagH'][in_host] - \
+                                             r_wesenheit * \
+                                             r16_c_data['Color'][in_host]
+            sig_app_mag_c[j, 0: n_c_ch[j]] = \
+                np.sqrt(r16_c_data['sigma_tot'][in_host] ** 2 - \
+                        sig_int_c_r16 ** 2)
+            est_p_c[j, 0: n_c_ch[j]] = r16_c_data['Period'][in_host]
+            est_z_c[j, 0: n_c_ch[j]] = r16_c_data['Z'][in_host]
+            est_col_c[j, 0: n_c_ch[j]] = r16_c_data['Color'][in_host]
+
+    # report data features if desired
     print("= Cepheid / SN hosts =")
     print('total of {:d} Cepheids selected'.format(n_c_tot))
     if verbose:
@@ -558,8 +624,9 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                     c_x_0_rho = c_x_0_cov_temp / c_err_temp / \
                                 x_0_err_temp
                     if np.abs(c_x_0_rho) > 0.95:
-                        s = '* SN {:s} corr coeff extreme: {:6.3f}'
-                        print(s.format(sn, c_x_0_rho))
+                        if verbose:
+                            s = '* SN {:s} corr coeff extreme: {:6.3f}'
+                            print(s.format(sn, c_x_0_rho))
                     cov = np.zeros((3, 3))
                     cov[0, 0] = x_0_err_temp ** 2
                     cov[1, 1] = x_1_err_temp ** 2
@@ -573,11 +640,12 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                     try:
                         l_cov = np.linalg.cholesky(cov)
                     except np.linalg.LinAlgError:
-                        s = '* SN {:s} x_0/x_1/c cov not pos def:'
-                        print(s.format(sn))
-                        print(cov)
-                        print('has eigenvalues: ', np.linalg.eigvals(cov))
-                        print('=> rejected')
+                        if verbose:
+                            s = '* SN {:s} x_0/x_1/c cov not pos def:'
+                            print(s.format(sn))
+                            print(cov)
+                            print('has eigenvalues: ', np.linalg.eigvals(cov))
+                            print('=> rejected')
                         continue
 
                     # R16 data quality cuts
@@ -601,23 +669,24 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                         cov_c_x_0_s.append(c_x_0_cov_temp)
                         n_s += 1
                     elif model_outliers is None:
-                        s = '* SN {:s} fails cuts unexpectedly!'
-                        print(s.format(sn))
-                        if (z_temp < z_s_min or z_temp > z_s_max):
-                            print('bad redshift: {:7.5f}'.format(z_temp))
-                        if (np.abs(c_temp) >= 0.3):
-                            print('bad colour: {:7.4f}'.format(c_temp))
-                        if (np.abs(x_1_temp) >= 3.0):
-                            print('bad stretch: {:7.4f}'.format(x_1_temp))
-                        if (x_1_err_temp >= 1.5):
-                            print('bad stretch err: {:7.4f}'.format(x_1_err_temp))
-                        if (prob_temp <= 0.001):
-                            print('bad prob: {:7.4f}'.format(prob_temp))
-                        if (peak_time_temp >= 2.0):
-                            print('bad peak time: {:7.4f}'.format(peak_time_temp))
-                        if (m_err_temp >= 0.2):
-                            print('bad mag err: {:7.4f}'.format(m_err_temp))
-                        print('=> rejected')
+                        if verbose:
+                            s = '* SN {:s} fails cuts unexpectedly!'
+                            print(s.format(sn))
+                            if (z_temp < z_s_min or z_temp > z_s_max):
+                                print('bad redshift: {:7.5f}'.format(z_temp))
+                            if (np.abs(c_temp) >= 0.3):
+                                print('bad colour: {:7.4f}'.format(c_temp))
+                            if (np.abs(x_1_temp) >= 3.0):
+                                print('bad stretch: {:7.4f}'.format(x_1_temp))
+                            if (x_1_err_temp >= 1.5):
+                                print('bad stretch err: {:7.4f}'.format(x_1_err_temp))
+                            if (prob_temp <= 0.001):
+                                print('bad prob: {:7.4f}'.format(prob_temp))
+                            if (peak_time_temp >= 2.0):
+                                print('bad peak time: {:7.4f}'.format(peak_time_temp))
+                            if (m_err_temp >= 0.2):
+                                print('bad mag err: {:7.4f}'.format(m_err_temp))
+                            print('=> rejected')
     
     # convert lists to arrays
     est_z_s = np.array(est_z_s)
@@ -642,49 +711,53 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
         est_x_0_s = np.array(est_x_0_s)
         sig_x_0_s = np.array(sig_x_0_s)
         cov_x_1_c_s = np.array(cov_x_1_c_s)
-        print("duplicate SNe: ", sne_dupes)
+        if verbose:
+            print("duplicate SNe: ", sne_dupes)
     s = '{} SNe after cuts'
     print(s.format(n_s))
-    s = 'RMS SN app mag err: {:7.5f}'
-    print(s.format(np.sqrt(np.mean(sig_app_mag_s ** 2))))
-    rms_sig_app_mag_tot = np.sqrt(np.mean(sig_app_mag_s ** 2 + \
-                                          sig_int_s_r16 ** 2))
-    s = 'RMS SN total app mag err: {:7.5f}'
-    print(s.format(rms_sig_app_mag_tot))
-    s = 'RMS SN z err: {:7.5f}'
-    print(s.format(np.sqrt(np.mean(sig_z_s ** 2))))
+    if verbose:
+        s = 'RMS SN app mag err: {:7.5f}'
+        print(s.format(np.sqrt(np.mean(sig_app_mag_s ** 2))))
+        rms_sig_app_mag_tot = np.sqrt(np.mean(sig_app_mag_s ** 2 + \
+                                              sig_int_s_r16 ** 2))
+        s = 'RMS SN total app mag err: {:7.5f}'
+        print(s.format(rms_sig_app_mag_tot))
+        s = 'RMS SN z err: {:7.5f}'
+        print(s.format(np.sqrt(np.mean(sig_z_s ** 2))))
     if dataset != "d17":
-        s = 'mean / sigma of SN shape: {:7.5f}+/-{:7.5f}'
-        print(s.format(np.mean(est_x_1_s), np.std(est_x_1_s)))
-        s = 'mean / sigma of SN colour: {:7.5f}+/-{:7.5f}'
-        print(s.format(np.mean(est_c_s), np.std(est_c_s)))
+        if verbose:
+            s = 'mean / sigma of SN shape: {:7.5f}+/-{:7.5f}'
+            print(s.format(np.mean(est_x_1_s), np.std(est_x_1_s)))
+            s = 'mean / sigma of SN colour: {:7.5f}+/-{:7.5f}'
+            print(s.format(np.mean(est_c_s), np.std(est_c_s)))
 
         # convert salt-2 covariance from (x0, x1, c) to (m_B, x1, c)
         sf = -2.5 / (est_x_0_s * np.log(10.0))
         sig_app_mag_s = np.abs(sig_x_0_s * sf)
         cov_x_1_app_mag_s = np.array(cov_x_1_x_0_s) * sf
         cov_c_app_mag_s = np.array(cov_c_x_0_s) * sf
-        s = '"average" stretch-colour obs cov: ' + \
-            '[[{:7.5f}, {:7.5f}, {:7.5f}],\n' + \
-            '                                  ' + \
-            ' [{:7.5f}, {:7.5f}, {:7.5f}],\n' + \
-            '                                  ' + \
-            ' [{:7.5f}, {:7.5f}, {:7.5f}]]'
-        print(s.format(np.mean(sig_app_mag_s ** 2), \
-                       np.mean(cov_x_1_app_mag_s), \
-                       np.mean(cov_c_app_mag_s), \
-                       np.mean(cov_x_1_app_mag_s), \
-                       np.mean(sig_x_1_s ** 2), np.mean(cov_x_1_c_s), \
-                       np.mean(cov_c_app_mag_s), np.mean(cov_x_1_c_s), \
-                       np.mean(sig_c_s ** 2)))
-        s = '"average" mag-stretch correlation: {:7.5f}'
-        print(s.format(np.mean(cov_x_1_app_mag_s / sig_x_1_s / \
-                               sig_app_mag_s)))
-        s = '"average" mag-colour correlation: {:7.5f}'
-        print(s.format(np.mean(cov_c_app_mag_s / sig_c_s / \
-                               sig_app_mag_s)))
-        s = '"average" stretch-colour correlation: {:7.5f}'
-        print(s.format(np.mean(cov_x_1_c_s / sig_x_1_s / sig_c_s)))
+        if verbose:
+            s = '"average" stretch-colour obs cov: ' + \
+                '[[{:7.5f}, {:7.5f}, {:7.5f}],\n' + \
+                '                                  ' + \
+                ' [{:7.5f}, {:7.5f}, {:7.5f}],\n' + \
+                '                                  ' + \
+                ' [{:7.5f}, {:7.5f}, {:7.5f}]]'
+            print(s.format(np.mean(sig_app_mag_s ** 2), \
+                           np.mean(cov_x_1_app_mag_s), \
+                           np.mean(cov_c_app_mag_s), \
+                           np.mean(cov_x_1_app_mag_s), \
+                           np.mean(sig_x_1_s ** 2), np.mean(cov_x_1_c_s), \
+                           np.mean(cov_c_app_mag_s), np.mean(cov_x_1_c_s), \
+                           np.mean(sig_c_s ** 2)))
+            s = '"average" mag-stretch correlation: {:7.5f}'
+            print(s.format(np.mean(cov_x_1_app_mag_s / sig_x_1_s / \
+                                   sig_app_mag_s)))
+            s = '"average" mag-colour correlation: {:7.5f}'
+            print(s.format(np.mean(cov_c_app_mag_s / sig_c_s / \
+                                   sig_app_mag_s)))
+            s = '"average" stretch-colour correlation: {:7.5f}'
+            print(s.format(np.mean(cov_x_1_c_s / sig_x_1_s / sig_c_s)))
     
     # return parsed data
     to_return = [n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, n_s, \

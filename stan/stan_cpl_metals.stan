@@ -13,7 +13,6 @@ data {
     int<lower=0> n_ch_c;                    // number of hosts with only Cepheids
     int<lower=0> n_ch_s;                    // number of Cepheid hosts with SN
     int<lower=0> n_c_tot;                   // total number of Cepheids
-    int<lower=0> n_s_hi_z;                  // number of high-redshift SNe
     vector[n_ch_d + n_ch_p] est_d_anc;      // measured distance of anchor
     vector[n_ch_d + n_ch_p] sig_d_anc;      // error on above
     int<lower=1,upper=n_ch> c_ch[n_c_tot];  // mapping between Cepheid and host
@@ -21,31 +20,23 @@ data {
     vector<lower=0>[n_c_tot] sig_app_mag_c; // error on above
     vector[n_c_tot] log_p_c;                // log10 of Cepheid period in days
     vector[n_c_tot] log_z_c;                // log10 of metallicity of Cepheid
-    vector[n_ch_s] est_app_mag_s;           // measured app mag of each SN
-    vector<lower=0>[n_ch_s] sig_app_mag_s;  // error on above
-    vector[n_s_hi_z] est_z_s_hi_z;          // measured redshift of each high-z SN
-    vector[n_s_hi_z] sig_z_s_hi_z;          // error on above
-    real sig_v_pec;                         // high-z SN RMS peculiar velocity
-    vector[3] data_s_hi_z[n_s_hi_z];        // estimated app mag, stretch & colour of high-z SNe
-    matrix[3, 3] cov_l_s_hi_z[n_s_hi_z];    // Cholesky decomp of cov mat of above estimates
-    real est_q_0;                           // measured deceleration parameter
-    real sig_q_0;                           // error on above
     real sig_zp_off;                        // uncertainty on zero-point offset
-    vector[n_ch] zp_off_mask;               // which hosts are offset?
+    vector[n_c_tot] zp_off_mask;            // which Cepheids are offset?
     vector[n_ch_p] lk_corr;                 // Lutz-Kelker corrections
+    real<lower=0.0> period_break;           // optional break in CPL relation p slope
 }
 transformed data {
     real c;                                 // c in km/s
     int n_ch_g;                             // number of hosts w/ distance or parallax
-    int n_sh;                               // number of SN hosts (low- and high-redshift)
-    vector[n_s_hi_z] sig_tot_z_s_hi_z;      // total uncertainty on high-z SN z
+    int two_p_slopes;                       // flag to use two period slopes
+    real log_period_break;                  // log_10 period at which to break CPL
     c = 2.99792458e5;
     n_ch_g = n_ch_d + n_ch_p;
-    n_sh = n_ch_s + n_s_hi_z;
-    for(i in 1: n_s_hi_z){
-        sig_tot_z_s_hi_z[i] = sqrt(sig_z_s_hi_z[i] * 
-                                   sig_z_s_hi_z[i] + 
-                                   sig_v_pec * sig_v_pec / c / c);
+    if (period_break > 0.0) {
+        two_p_slopes = 1;
+        log_period_break = log10(period_break);
+    } else {
+        two_p_slopes = 0;
     }
 }
 parameters {
@@ -53,8 +44,8 @@ parameters {
     // CPL parameters
     real abs_mag_c_std;
     real slope_p;
+    real slope_p_low[two_p_slopes];
     real slope_z;
-    //real<lower=0> sig_int_c;
     real<lower=0.01, upper=3.0> sig_int_c;
     real zp_off;
     
@@ -93,18 +84,36 @@ transformed parameters {
         if (is_inf(d))
             reject("BAD SAMPLE: |anchor ", i, " distance| (", 
                    d, ") = inf; true_mu_h = ", true_mu_h[i]);
-        true_d_anc[i] = 1.0e-3 / d; # units are mas
+        true_d_anc[i] = 1.0e-3 / d; // units are mas
     }
 
     // rescale true Cepheid apparent magnitudes from unit normal
-    for(i in 1: n_c_tot){
-        true_app_mag_c[i] = true_app_mag_c_un[i] * sig_int_c + 
-                            true_mu_h[c_ch[i]] + abs_mag_c_std + 
-                            slope_p * log_p_c[i] + 
-                            slope_z * log_z_c[i] + 
-                            zp_off_mask[c_ch[i]] * zp_off;
+    if (two_p_slopes) {
+        for(i in 1: n_c_tot){
+            if (log_p_c[i] >= log_period_break) {
+                true_app_mag_c[i] = true_app_mag_c_un[i] * sig_int_c + 
+                                    true_mu_h[c_ch[i]] + abs_mag_c_std + 
+                                    slope_p * (log_p_c[i] - log_period_break) + 
+                                    slope_z * log_z_c[i] + 
+                                    zp_off_mask[i] * zp_off;
+            } else {
+                true_app_mag_c[i] = true_app_mag_c_un[i] * sig_int_c + 
+                                    true_mu_h[c_ch[i]] + abs_mag_c_std + 
+                                    slope_p_low[1] * (log_p_c[i] - log_period_break) + 
+                                    slope_z * log_z_c[i] + 
+                                    zp_off_mask[i] * zp_off;
+            }
+        }
+    } else {
+        for(i in 1: n_c_tot){
+            true_app_mag_c[i] = true_app_mag_c_un[i] * sig_int_c + 
+                                true_mu_h[c_ch[i]] + abs_mag_c_std + 
+                                slope_p * log_p_c[i] + 
+                                slope_z * log_z_c[i] + 
+                                zp_off_mask[i] * zp_off;
+        }
     }
-    
+
 }
 model {
 
@@ -116,6 +125,9 @@ model {
     // see also https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations
     abs_mag_c_std ~ normal(0.0, 20.0);
     slope_p ~ normal(-5.0, 5.0);
+    if (two_p_slopes) {
+        slope_p_low[1] ~ normal(-5.0, 5.0);
+    }
     slope_z ~ normal(0.0, 5.0);
     sig_int_c ~ normal(0.1, 0.2);
     //target += -log(sig_int_c); // Jaynes' version of Jeffreys' prior

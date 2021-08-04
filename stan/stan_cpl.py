@@ -19,17 +19,18 @@ mp.rcParams['lines.linewidth'] = 1.5
 def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
               app_mag_err_c, p_c, sig_int_c, mu_anc, sig_mu_anc, \
               zp_off_mask, sig_zp_off, app_mag_s, app_mag_err_s, \
-              sig_int_s, log_z_c = None, prior_s_p = None, \
-              prior_s_z = None):
+              sig_int_s, log_z_c=None, prior_s_p=None, \
+              prior_s_z=None, period_break=0.0):
 
     # helpful parameters
     # n_obs is one magnitude per Cepheid and SN, plus one constraint
     # per anchor and one more for the zero-point offset
     # n_par is one delta-mu per distance anchor (not parallax), one 
-    # mu per calibrator/C+SN host, 2+1 CPL params, 1 SN param and the
+    # mu per calibrator/C+SN host, 2+1+1 CPL params, 1 SN param and the
     # zero-point offset
     # ORDER is one mu per calibrator/C+SN host, M^c, s^p, d_zp, M^s
     # one d_mu per distance (not parallax) anchor, s^z
+    # NB: prior_s_p is not integrated with period_break
     n_ch = len(n_c_ch)
     n_ch_g = n_ch_d + n_ch_p
     n_c_tot = np.sum(n_c_ch)
@@ -41,6 +42,9 @@ def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
         n_obs += 1
     if prior_s_z is not None:
         n_obs += 1
+    if period_break:
+        n_par += 1
+        log_period_break = np.log10(period_break)
     y_vec = np.zeros(n_obs)
     l_mat = np.zeros((n_obs, n_par))
     c_mat_inv = np.zeros((n_obs, n_obs))
@@ -59,12 +63,23 @@ def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
             if i >= n_ch_g:
                 l_mat[k, i - n_ch_g] = 1.0
             l_mat[k, n_ch - n_ch_g] = 1.0
-            l_mat[k, n_ch - n_ch_g + 1] = np.log10(p_c[i, j])
-            l_mat[k, n_ch - n_ch_g + 2] = zp_off_mask[i]
+            if period_break:
+                if p_c[i, j] >= period_break:
+                    l_mat[k, n_ch - n_ch_g + 1] = np.log10(p_c[i, j]) - log_period_break
+            else:
+                l_mat[k, n_ch - n_ch_g + 1] = np.log10(p_c[i, j])
+            l_mat[k, n_ch - n_ch_g + 2] = zp_off_mask[i, j]
             if i < n_ch_d:
                 l_mat[k, n_ch - n_ch_g + 3 + i] = 1.0
             if log_z_c is not None:
                 l_mat[k, n_ch - n_ch_p + 4] = log_z_c[i, j]
+                if period_break:
+                    if p_c[i, j] < period_break:
+                        l_mat[k, n_ch - n_ch_p + 5] = np.log10(p_c[i, j]) - log_period_break
+            else:
+                if period_break:
+                    if p_c[i, j] < period_break:
+                        l_mat[k, n_ch - n_ch_p + 4] = np.log10(p_c[i, j]) - log_period_break
 
             # build covariance matrix
             if i >= n_ch_d and i < n_ch_g:
@@ -133,7 +148,8 @@ def riess_reject(n_c_ch, app_mag_err_c, sig_int_c, res, threshold = 2.7):
                  "N5584", "N4038", "N4536", "N1015", "N1365", \
                  "N1448", "N3447", "N7250", "N5917", "N4424", \
                  "U9391", "N3972", "N2442", "M101"]
-        print(hosts[to_rej[0]], to_rej[1] + 1)#, res_scaled[to_rej]
+        print(hosts[to_rej[0]], 'Cepheid', to_rej[1] + 1, \
+              'rejected')#, res_scaled[to_rej]
         return to_rej
     else:
         return None
@@ -148,15 +164,16 @@ def riess_delete(i_del, target):
 
 # settings and cuts to match previous analyses
 n_chains = 4
-n_samples = 10000
-recompile = True
+n_samples = 1000 # 10000
+recompile = False
 use_riess_rejection = False
-ceph_only = False
+ceph_only = True
 sne_sum = False
 gauss_mu_like = False
 fix_redshifts = False
 model_outliers = None # None, "gmm", "ht"
 inc_met_dep = True
+period_break = 10.0 # 0.0
 ng_maser_pdf = False
 nir_sne = False
 inc_zp_off = True
@@ -168,7 +185,7 @@ save_d_anc = True
 save_host_mus = False
 constrain = True
 stan_constrain = True
-setup = "rd19_one_anc"
+setup = "rd19_two_anc_lmc_combo"
 sim = False
 max_col_c = None # None or maximum V-I colour to include
 
@@ -318,7 +335,8 @@ while (True):
                                      rfit_zp_off_mask, sig_zp_off, \
                                      est_app_mag_s_ch, \
                                      sig_app_mag_s_ch, \
-                                     sig_int_s, rfit_est_z_c)
+                                     sig_int_s, rfit_est_z_c, \
+                                     period_break=period_break)
     to_rej = riess_reject(rfit_n_c_ch, rfit_sig_app_mag_c, \
                           sig_int_c, rfit_res)
     if (to_rej is None):
@@ -357,8 +375,11 @@ if sim:
     print(' slope_p: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit[n_ch_c + n_ch_s + 1], \
         rfit_err[n_ch_c + n_ch_s + 1], sim_info['slope_p']))
     if inc_met_dep:
-        print(' slope_z: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit[-1], \
-            rfit_err[-1], sim_info['slope_z']))
+        print(' slope_z: {0:8.5f} +/- {1:7.5f} ({2:8.5f})'.format(rfit[n_ch_d + n_ch_c + n_ch_s + 4], \
+            rfit_err[n_ch_d + n_ch_c + n_ch_s + 4], sim_info['slope_z']))
+    if period_break:
+        print(' slope_p_low: {0:8.5f} +/- {1:7.5f}'.format(rfit[-1], \
+            rfit_err[-1], sim_info['slope_p']))
     print(' m_0^SN: {0:7.4f} +/- {1:7.5f} ({2:7.4f})'.format(rfit[n_ch - n_ch_p + 3], \
         rfit_err[n_ch - n_ch_p + 3], sim_info['abs_mag_s_std']))
     print(' zp_off: {0:7.4f} +/- {1:7.5f} ({2:7.4f})'.format(rfit[n_ch - n_ch_g + 2], \
@@ -380,7 +401,10 @@ else:
     print(' slope_p: {0:8.5f} +/- {1:7.5f}'.format(rfit[n_ch_c + n_ch_s + 1], \
         rfit_err[n_ch_c + n_ch_s + 1]))
     if inc_met_dep:
-        print(' slope_z: {0:8.5f} +/- {1:7.5f}'.format(rfit[-1], \
+        print(' slope_z: {0:8.5f} +/- {1:7.5f}'.format(rfit[n_ch_d + n_ch_c + n_ch_s + 4], \
+            rfit_err[n_ch_d + n_ch_c + n_ch_s + 4]))
+    if period_break:
+        print(' slope_p_low: {0:8.5f} +/- {1:7.5f}'.format(rfit[-1], \
             rfit_err[-1]))
     print(' m_0^SN: {0:7.4f} +/- {1:7.5f}'.format(rfit[n_ch - n_ch_p + 3], \
         rfit_err[n_ch - n_ch_p + 3]))
@@ -388,6 +412,7 @@ else:
         rfit_err[n_ch - n_ch_g + 2]))
     print(' H_0: {0:8.5f} +/- {1:7.5f}'.format(rfit_h_0, \
           rfit_sig_h_0))
+
 
 # save results (trimmed parameter covariance matrix) to file.
 # order is: M^c, s^p, [s^Z,] M^s. append independent a_x constraint
@@ -475,6 +500,7 @@ stan_est_app_mag_c = np.zeros(n_c_tot)
 stan_sig_app_mag_c = np.zeros(n_c_tot)
 stan_est_p_c = np.zeros(n_c_tot)
 stan_est_z_c = np.zeros(n_c_tot)
+stan_zp_off_mask = np.zeros(n_c_tot)
 j = 0
 for i in range(n_ch):
     stan_c_ch[j: j + n_c_ch[i]] = i + 1
@@ -483,6 +509,7 @@ for i in range(n_ch):
     stan_est_p_c[j: j + n_c_ch[i]] = est_p_c[i, 0: n_c_ch[i]]
     if inc_met_dep:
         stan_est_z_c[j: j + n_c_ch[i]] = est_z_c[i, 0: n_c_ch[i]]
+    stan_zp_off_mask[j: j + n_c_ch[i]] = zp_off_mask[i, 0: n_c_ch[i]]
     j += n_c_ch[i]
 if not nir_sne:
     data_s_hi_z = np.zeros((n_s, 3))
@@ -511,7 +538,8 @@ stan_data = {'n_ch': n_ch, 'n_ch_d': n_ch_d, 'n_ch_p': n_ch_p, \
              'sig_app_mag_s': sig_app_mag_s_ch, \
              'est_z_s_hi_z': est_z_s, \
              'sig_zp_off': sig_zp_off, \
-             'zp_off_mask': zp_off_mask}
+             'zp_off_mask': stan_zp_off_mask, \
+             'period_break': period_break}
 if sne_sum:
     if gauss_mu_like:
         stan_data['est_mu_anc'] = mu_anc
@@ -593,6 +621,9 @@ if ng_maser_pdf:
 if inc_met_dep:
     stan_data['log_z_c'] = stan_est_z_c
     stan_pars.append('slope_z')
+if period_break:
+    stan_pars.append('slope_p_low')
+    base = base + '_period_break_{:.1f}'.format(period_break).replace('.', 'p')
 if save_d_anc:
     stan_pars.append('true_d_anc')
 if save_host_mus:
@@ -634,6 +665,9 @@ else:
         i = stan_pars.index('sig_mm_s')
         stan_pars[i] = 'sig_mm_s1'
         stan_pars.insert(i + 1, 'sig_mm_s2')
+    if period_break:
+        i = stan_pars.index('slope_p_low')
+        stan_pars[i] = 'slope_p_low1'
     if save_d_anc:
         i = stan_pars.index('true_d_anc')
         stan_pars[i] = 'true_d_anc.1'
