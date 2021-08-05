@@ -24,6 +24,7 @@ data {
     vector[n_c_tot] zp_off_mask;            // which Cepheids are offset?
     vector[n_ch_p] lk_corr;                 // Lutz-Kelker corrections
     real<lower=0.0> period_break;           // optional break in CPL relation p slope
+    int<lower=0, upper=1> break_at_intcpt;  // place intercept at p slope break to make CPL continuous?
 }
 transformed data {
     real c;                                 // c in km/s
@@ -93,13 +94,15 @@ transformed parameters {
             if (log_p_c[i] >= log_period_break) {
                 true_app_mag_c[i] = true_app_mag_c_un[i] * sig_int_c + 
                                     true_mu_h[c_ch[i]] + abs_mag_c_std + 
-                                    slope_p * (log_p_c[i] - log_period_break) + 
+                                    slope_p * 
+                                    (log_p_c[i] - log_period_break * break_at_intcpt) + 
                                     slope_z * log_z_c[i] + 
                                     zp_off_mask[i] * zp_off;
             } else {
                 true_app_mag_c[i] = true_app_mag_c_un[i] * sig_int_c + 
                                     true_mu_h[c_ch[i]] + abs_mag_c_std + 
-                                    slope_p_low[1] * (log_p_c[i] - log_period_break) + 
+                                    slope_p_low[1] * 
+                                    (log_p_c[i] - log_period_break * break_at_intcpt) + 
                                     slope_z * log_z_c[i] + 
                                     zp_off_mask[i] * zp_off;
             }

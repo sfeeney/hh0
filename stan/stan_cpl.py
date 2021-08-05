@@ -20,7 +20,7 @@ def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
               app_mag_err_c, p_c, sig_int_c, mu_anc, sig_mu_anc, \
               zp_off_mask, sig_zp_off, app_mag_s, app_mag_err_s, \
               sig_int_s, log_z_c=None, prior_s_p=None, \
-              prior_s_z=None, period_break=0.0):
+              prior_s_z=None, period_break=0.0, break_at_intcpt=False):
 
     # helpful parameters
     # n_obs is one magnitude per Cepheid and SN, plus one constraint
@@ -65,7 +65,7 @@ def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
             l_mat[k, n_ch - n_ch_g] = 1.0
             if period_break:
                 if p_c[i, j] >= period_break:
-                    l_mat[k, n_ch - n_ch_g + 1] = np.log10(p_c[i, j]) - log_period_break
+                    l_mat[k, n_ch - n_ch_g + 1] = np.log10(p_c[i, j]) - log_period_break * int(break_at_intcpt)
             else:
                 l_mat[k, n_ch - n_ch_g + 1] = np.log10(p_c[i, j])
             l_mat[k, n_ch - n_ch_g + 2] = zp_off_mask[i, j]
@@ -75,11 +75,11 @@ def riess_fit(n_ch_d, n_ch_p, n_ch_c, n_ch_s, n_c_ch, app_mag_c, \
                 l_mat[k, n_ch - n_ch_p + 4] = log_z_c[i, j]
                 if period_break:
                     if p_c[i, j] < period_break:
-                        l_mat[k, n_ch - n_ch_p + 5] = np.log10(p_c[i, j]) - log_period_break
+                        l_mat[k, n_ch - n_ch_p + 5] = np.log10(p_c[i, j]) - log_period_break * int(break_at_intcpt)
             else:
                 if period_break:
                     if p_c[i, j] < period_break:
-                        l_mat[k, n_ch - n_ch_p + 4] = np.log10(p_c[i, j]) - log_period_break
+                        l_mat[k, n_ch - n_ch_p + 4] = np.log10(p_c[i, j]) - log_period_break * int(break_at_intcpt)
 
             # build covariance matrix
             if i >= n_ch_d and i < n_ch_g:
@@ -174,6 +174,7 @@ fix_redshifts = False
 model_outliers = None # None, "gmm", "ht"
 inc_met_dep = True
 period_break = 10.0 # 0.0
+break_at_intcpt = False
 ng_maser_pdf = False
 nir_sne = False
 inc_zp_off = True
@@ -185,7 +186,7 @@ save_d_anc = True
 save_host_mus = False
 constrain = True
 stan_constrain = True
-setup = "rd19_two_anc_lmc_combo"
+setup = "rd19_one_anc"
 sim = False
 max_col_c = None # None or maximum V-I colour to include
 
@@ -336,7 +337,8 @@ while (True):
                                      est_app_mag_s_ch, \
                                      sig_app_mag_s_ch, \
                                      sig_int_s, rfit_est_z_c, \
-                                     period_break=period_break)
+                                     period_break=period_break, \
+                                     break_at_intcpt=break_at_intcpt)
     to_rej = riess_reject(rfit_n_c_ch, rfit_sig_app_mag_c, \
                           sig_int_c, rfit_res)
     if (to_rej is None):
@@ -412,7 +414,6 @@ else:
         rfit_err[n_ch - n_ch_g + 2]))
     print(' H_0: {0:8.5f} +/- {1:7.5f}'.format(rfit_h_0, \
           rfit_sig_h_0))
-
 
 # save results (trimmed parameter covariance matrix) to file.
 # order is: M^c, s^p, [s^Z,] M^s. append independent a_x constraint
@@ -539,7 +540,8 @@ stan_data = {'n_ch': n_ch, 'n_ch_d': n_ch_d, 'n_ch_p': n_ch_p, \
              'est_z_s_hi_z': est_z_s, \
              'sig_zp_off': sig_zp_off, \
              'zp_off_mask': stan_zp_off_mask, \
-             'period_break': period_break}
+             'period_break': period_break, \
+             'break_at_intcpt': int(break_at_intcpt)}
 if sne_sum:
     if gauss_mu_like:
         stan_data['est_mu_anc'] = mu_anc
@@ -624,6 +626,8 @@ if inc_met_dep:
 if period_break:
     stan_pars.append('slope_p_low')
     base = base + '_period_break_{:.1f}'.format(period_break).replace('.', 'p')
+    if not break_at_intcpt:
+        base = base + '_1_d_intcpt'
 if save_d_anc:
     stan_pars.append('true_d_anc')
 if save_host_mus:
