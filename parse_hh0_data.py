@@ -63,7 +63,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
        dataset == "rd19_one_anc":
         d_anchors = ["N4258"]#["LMC"]#["N4258"]
         p_anchors = []
-        ceph_only_hosts = ["M31"]#[]
+        ceph_only_hosts = []#[]
         ceph_sn_hosts = ["N3021", "N3370", "N1309", "N3982", "N4639", \
                          "N5584", "N4038", "N4536", "N1015", "N1365", \
                          "N1448", "N3447", "N7250", "N5917", "N4424", \
@@ -114,7 +114,8 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
                          "N5584", "N4038", "N4536", "N1015", "N1365", \
                          "N1448", "N3447", "N7250", "N5917", "N4424", \
                          "U9391", "N3972", "N2442", "M101"]
-    elif dataset == "r19_one_anc_lmc"  or dataset == "rd19_one_anc_lmc":
+    elif dataset == "r19_one_anc_lmc"  or dataset == "r19_one_anc_lmc_combo":
+        # same as "rd19_one_anc_lmc" / "rd19_one_anc_lmc_combo"
         d_anchors = ["LMC"]
         p_anchors = []
         ceph_only_hosts = []
@@ -145,14 +146,17 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
     # * Reid+ 2019 Table 1 NGC4258: 7.58 +/- 0.11 Mpc
     # * Pietrzynski+ 2019 LMC: 49.59 +/- 0.09 (stat) +/- 0.54 (sys) kpc
     # latter only used in r19; both in rd19
-    # 
-    # @TODO: R19 also adds in CRNL and geometric systematic errors that 
-    # are not included here
+    # NB: R19 also adds in CRNL and geometric systematic errors to the 
+    # LMC distance MODULUS. i've converted to distance errors here
+    lmc_extra_mag_sys = np.sqrt(0.0024 ** 2 + 0.002 ** 2)
+    lmc_extra_dis_frac_sys = np.log(10.0) * lmc_extra_mag_sys / 5.0
     if 'r19' in dataset:
         dis_anc = np.array([7.54e6, 49.59e3]) / 1.0e6
         sig_dis_anc = np.array([np.sqrt(0.17e6 ** 2 + 0.10e6 ** 2), \
                                 np.sqrt(0.09e3 ** 2 + 0.54e3 ** 2)]) / \
                       1.0e6
+        sig_dis_anc[1] = np.sqrt(sig_dis_anc[1] ** 2 + \
+                                 (lmc_extra_dis_frac_sys * dis_anc[1]) ** 2)
     elif 'rd19' in dataset:
         #dis_anc = np.array([7.58e6, 49.59e3]) / 1.0e6
         #sig_dis_anc = np.array([np.sqrt(0.08e6 ** 2 + 0.08e6 ** 2), \
@@ -162,6 +166,8 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
         sig_dis_anc = np.array([np.sqrt(0.082e6 ** 2 + 0.076e6 ** 2), \
                                 np.sqrt(0.09e3 ** 2 + 0.54e3 ** 2)]) / \
                       1.0e6
+        sig_dis_anc[1] = np.sqrt(sig_dis_anc[1] ** 2 + \
+                                 (lmc_extra_dis_frac_sys * dis_anc[1]) ** 2)
     else:
         dis_anc = np.array([7.54e6, 49.97e3]) / 1.0e6
         sig_dis_anc = np.array([np.sqrt(0.17e6 ** 2 + 0.10e6 ** 2), \
@@ -198,7 +204,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
     # compile geometric measurements
     if n_ch_p == 0:
         if dataset == 'r19_one_anc_lmc' or \
-           dataset == 'rd19_one_anc_lmc':
+           dataset == 'r19_one_anc_lmc_combo':
             dis_anc = dis_anc[1: 2]
             sig_dis_anc = sig_dis_anc[1: 2]
         else:
@@ -273,9 +279,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
     # do we need to read R19 HST LMC Cepheid photometry?
     if dataset == 'r19' or dataset == 'rd19' or \
        dataset == 'r19_one_anc_lmc_cal' or \
-       dataset == 'rd19_one_anc_lmc_cal' or \
        dataset == 'r19_one_anc_lmc' or \
-       dataset == 'rd19_one_anc_lmc' or \
        dataset == 'r19_two_anc' or \
        dataset == 'rd19_two_anc' or \
        'lmc_combo' in dataset:
@@ -352,7 +356,7 @@ def hh0_parse(dataset="r16", fix_redshifts=True, inc_met_dep=True, \
         # R16 LMC Cepheids have offset. for now, set all LMC Cephs
         # to have offset; R19 Cepheids will be turned off in the 
         # block below
-        zp_off_mask[1, 0: n_c_ch[1]] = 1.0
+        zp_off_mask[ind_lmc, 0: n_c_ch[ind_lmc]] = 1.0
 
     # fill Cepheid arrays
     n_c_tot = np.sum(n_c_ch)
